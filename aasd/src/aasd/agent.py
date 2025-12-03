@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from spade import agent
@@ -24,11 +25,25 @@ class CowAgent(agent.Agent):
         # State: knowledge about all cows (including self)
         self.state: Dict[str, Any] = {self.cow_id: self._get_own_state()}
 
+        # Setup state directory
+        self.state_dir: Path = Path("state")
+        self.state_dir.mkdir(exist_ok=True)
+
     def _random_location(self) -> Tuple[float, float]:
         """Generate random location within boundaries"""
         lat_min, lat_max, lon_min, lon_max = self.boundaries
         lat = random.uniform(lat_min, lat_max)
         lon = random.uniform(lon_min, lon_max)
+        return (lat, lon)
+
+    def _mutate_location(self) -> Tuple[float, float]:
+        """Generate random location within boundaries"""
+        lat_curr, lon_curr = self.location
+        lat_min, lat_max, lon_min, lon_max = self.boundaries
+        lat_max_delta = (lat_max - lat_min) * 0.1
+        lon_max_delta = (lon_max - lon_min) * 0.1
+        lat = random.uniform(lat_curr - lat_max_delta, lat_curr + lat_max_delta)
+        lon = random.uniform(lon_curr - lon_max_delta, lon_curr + lon_max_delta)
         return (lat, lon)
 
     def _get_own_state(self) -> Dict[str, Any]:
@@ -40,6 +55,12 @@ class CowAgent(agent.Agent):
             "timestamp": self.timestamp,
         }
 
+    def dump_state_to_file(self) -> None:
+        """Dump current state to a JSON file"""
+        state_file = self.state_dir / f"{self.cow_id}.json"
+        with open(state_file, "w") as f:
+            json.dump(self.state, f, indent=2)
+
     def add_peer(self, peer_jid: str) -> None:
         """Add a peer agent to broadcast to"""
         if peer_jid not in self.known_agents:
@@ -50,7 +71,7 @@ class CowAgent(agent.Agent):
         property_choice = random.choice(["location", "health"])
 
         if property_choice == "location":
-            self.location = self._random_location()
+            self.location = self._mutate_location()
         elif property_choice == "health":
             self.health = random.choice(["healthy", "unhealthy"])
 
@@ -90,6 +111,9 @@ class CowAgent(agent.Agent):
                 # Randomly mutate a property
                 self.agent.mutate_property()
 
+                # Dump state to file
+                self.agent.dump_state_to_file()
+
                 # Broadcast current state to all peers
                 state_message = {"state": self.agent.state, "sender": self.agent.cow_id}
 
@@ -118,6 +142,10 @@ class CowAgent(agent.Agent):
                     # Consolidate received state with current state
                     state_changed = self.agent.consolidate_state(received_state)
 
+                    if state_changed:
+                        # Dump updated state to file
+                        self.agent.dump_state_to_file()
+
                     print(f"Cow {self.agent.cow_id}: Received state from Cow {sender_id}")
 
                     # If state changed, propagate to other peers
@@ -145,5 +173,9 @@ class CowAgent(agent.Agent):
         print(f"  Location: {self.location}")
         print(f"  Health: {self.health}")
         print(f"  Boundaries: {self.boundaries}")
+
+        # Dump initial state
+        self.dump_state_to_file()
+
         self.add_behaviour(self.BroadcastBehaviour())
         self.add_behaviour(self.ListenBehaviour())

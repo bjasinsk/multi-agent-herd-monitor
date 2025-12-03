@@ -13,7 +13,9 @@ async def _main() -> None:
     print("Starting cow herd tracking system...\nEnsure that an XMPP server is running on localhost.")
     print("\n $ uv run spade run\n")
     # Define boundaries for the virtual fence (lat_min, lat_max, lon_min, lon_max)
-    boundaries = (50.0, 52.0, 19.0, 21.0)  # Example area in Poland
+    # 52.1269282155582, 20.482375617784786
+    # 52.11721796293521, 20.463170189256793
+    boundaries = (52.11721796293521, 52.1269282155582, 20.463170189256793, 20.482375617784786)  # Example area in Poland
 
     # Create cow agents
     num_cows = 6

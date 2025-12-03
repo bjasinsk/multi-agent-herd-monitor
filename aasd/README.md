@@ -45,3 +45,9 @@ Run with autoreload:
 ```shell
 uv run debugpy -m aasd
 ```
+
+Run the Streamlit live dashboard:
+
+```shell
+uv run streamlit run src/aasd/dashboard.py
+```
