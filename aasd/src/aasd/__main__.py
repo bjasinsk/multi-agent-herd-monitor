@@ -1,11 +1,12 @@
 import asyncio
 import math
+import random
 from typing import List, Tuple
 
 import spade
 import spade.cli
 
-from aasd.agent import CowAgent
+from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 
 # How many cows to spawn
 NUM_AGENTS = 15
@@ -13,14 +14,26 @@ NUM_AGENTS = 15
 # Every value >0 adds that many extra edges to create cycles (agents must stop propagation by themselves)
 NUM_EXTRA_EDGES = 1
 # Chance that a cow mutates its location or health at a given second. Higher values lead to more frequent changes.
-MUTATION_PROBABILITY = 0.02
+MUTATION_PROBABILITY = 0.05
 # Delay between sending state updates. Set this to a higher value to actually see anything.
 SEND_DELAY_SECONDS = 0.5
 
 
-def calculate_distance(loc1: Tuple[float, float], loc2: Tuple[float, float]) -> float:
+def calculate_distance(loc1: Location, loc2: Location) -> float:
     """Calculate Euclidean distance between two locations"""
-    return math.sqrt((loc1[0] - loc2[0]) ** 2 + (loc1[1] - loc2[1]) ** 2)
+    return math.sqrt((loc1.latitude - loc2.latitude) ** 2 + (loc1.longitude - loc2.longitude) ** 2)
+
+
+def random_location(boundaries: Boundaries) -> Location:
+    """Generate a random location within boundaries"""
+    lat = random.uniform(boundaries.lat_min, boundaries.lat_max)
+    lon = random.uniform(boundaries.lon_min, boundaries.lon_max)
+    return Location(lat, lon)
+
+
+def random_health() -> HealthStatus:
+    """Generate a random health status"""
+    return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
 
 
 def build_minimum_spanning_tree(cows: List[CowAgent]) -> List[Tuple[int, int]]:
@@ -70,7 +83,12 @@ async def _main() -> None:
         "Starting cow herd tracking system...\nI nothing happens, ensure that an XMPP server is running on localhost."
     )
     print("\n $ uv run spade run\n")
-    boundaries = (52.114894130999346, 52.135600964392594, 20.455205770503397, 20.494292477391095)
+    boundaries = Boundaries(
+        lat_min=52.114894130999346,
+        lat_max=52.135600964392594,
+        lon_min=20.455205770503397,
+        lon_max=20.494292477391095,
+    )
 
     cows = []
 
@@ -80,6 +98,8 @@ async def _main() -> None:
             "password",
             f"Cow-{i}",
             boundaries,
+            random_location(boundaries),
+            random_health(),
             mutation_probability=MUTATION_PROBABILITY,
             send_delay_seconds=SEND_DELAY_SECONDS,
         )

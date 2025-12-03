@@ -6,7 +6,7 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-# How often to update the map and "global" state table
+# How often to update the map and "global" state table. Frequent updates strongly impact performance.
 MAP_UPDATE_INTERVAL_SECONDS = 0.5
 # How often to update the knowledge consistency table
 TABLE_UPDATE_INTERVAL_SECONDS = 0.2
@@ -49,27 +49,22 @@ def build_knowledge_consistency_data(agent_states: Dict[str, Dict[str, Any]]) ->
     for observer_id, observer_knowledge in agent_states.items():
         for cow_id in sorted(agent_states.keys()):
             if cow_id == observer_id:
-                # Skip self-knowledge
                 continue
 
             if cow_id not in observer_knowledge:
-                # Observer doesn't know about this cow yet
                 status = "❌ Unknown"
                 location = "N/A"
                 health = "N/A"
                 timestamp_diff = "N/A"
             elif cow_id not in actual_states:
-                # Actual state not available
                 status = "⚠️ No Actual Data"
                 location = str(observer_knowledge[cow_id].get("location", "N/A"))
                 health = observer_knowledge[cow_id].get("health", "N/A")
                 timestamp_diff = "N/A"
             else:
-                # Compare timestamps
                 observer_timestamp = observer_knowledge[cow_id].get("timestamp", 0)
                 actual_timestamp = actual_states[cow_id].get("timestamp", 0)
 
-                # Check if information is up-to-date (within 1 second tolerance)
                 if abs(observer_timestamp - actual_timestamp) < 1:
                     status = "✅ Up-to-date"
                 else:
@@ -105,23 +100,21 @@ def render_location_plot() -> None:
 
     actual_states = get_actual_states(agent_states)
 
-    # Prepare data for plotting
     locations_data = []
     for cow_id, state in actual_states.items():
         location = state.get("location", (0, 0))
         health = state.get("health", "unknown")
-        locations_data.append({"cow_id": cow_id, "latitude": location[0], "longitude": location[1], "health": health})
+        locations_data.append(
+            {"cow_id": cow_id, "latitude": location["latitude"], "longitude": location["longitude"], "health": health}
+        )
 
     if locations_data:
         df = pd.DataFrame(locations_data)
 
-        # Create the plot
-        st.subheader("🐄 Cow Locations")
+        st.subheader("🐄 Cow locations")
 
-        # Extract cow number from cow_id (e.g., "Cow-1" -> "1")
         df["cow_number"] = df["cow_id"].str.extract(r"(\d+)")[0].astype(str)
 
-        # Color by health status - use RGB lists for pydeck
         def get_color(health: str) -> list:
             if health == "healthy":
                 return [0, 255, 0, 200]  # Green
@@ -132,31 +125,26 @@ def render_location_plot() -> None:
 
         df["color"] = df["health"].apply(get_color)
 
-        # Rename columns for pydeck
         df = df.rename(columns={"latitude": "lat", "longitude": "lon"})
 
-        # Build peer connection lines
         peer_lines = []
         for cow_id, state in actual_states.items():
             peers = state.get("peers", [])
             cow_location = state.get("location", (0, 0))
 
             for peer_jid in peers:
-                # Extract peer cow_id from JID (e.g., "cow1@localhost" -> "Cow-1")
                 peer_num = peer_jid.split("@")[0].replace("cow", "")
                 peer_cow_id = f"Cow-{peer_num}"
 
-                # Only draw line if peer exists and avoid duplicates (only draw from lower to higher ID)
                 if peer_cow_id in actual_states and cow_id < peer_cow_id:
                     peer_location = actual_states[peer_cow_id].get("location", (0, 0))
                     peer_lines.append(
                         {
-                            "start": [cow_location[1], cow_location[0]],  # [lon, lat]
-                            "end": [peer_location[1], peer_location[0]],  # [lon, lat]
+                            "start": [cow_location["longitude"], cow_location["latitude"]],  # [lon, lat]
+                            "end": [peer_location["longitude"], peer_location["latitude"]],  # [lon, lat]
                         }
                     )
 
-        # Create LineLayer for peer connections
         line_layer = pdk.Layer(
             "LineLayer",
             peer_lines,
@@ -167,7 +155,6 @@ def render_location_plot() -> None:
             pickable=False,
         )
 
-        # Create semi-transparent circle layer behind text
         circle_layer = pdk.Layer(
             "ScatterplotLayer",
             df,
@@ -181,7 +168,6 @@ def render_location_plot() -> None:
             line_width_min_pixels=1,
         )
 
-        # Create pydeck layer with text labels
         text_layer = pdk.Layer(
             "TextLayer",
             df,
@@ -192,7 +178,6 @@ def render_location_plot() -> None:
             get_alignment_baseline="'center'",
         )
 
-        # Create view state centered on the boundaries
         view_state = pdk.ViewState(
             latitude=52.1219914893008,
             longitude=20.47171532833653,
@@ -200,17 +185,13 @@ def render_location_plot() -> None:
             pitch=0,
         )
 
-        # Create deck with layers: lines in back, then circles, then text on top
         deck = pdk.Deck(
             layers=[line_layer, circle_layer, text_layer],
             initial_view_state=view_state,
-            # map_style="mapbox://styles/mapbox/light-v9",
         )
 
-        # Display the map
         st.pydeck_chart(deck, width="stretch")
 
-        # Display detailed table
         st.dataframe(
             df[["cow_id", "lat", "lon", "health"]],
             width="stretch",
@@ -227,13 +208,12 @@ def render_knowledge_table() -> None:
     if not agent_states:
         return
 
-    st.subheader("🧠 Knowledge Consistency")
+    st.subheader("🧠 Knowledge consistency")
     st.caption("Shows what each cow knows about others and whether that information is current")
 
     knowledge_df = build_knowledge_consistency_data(agent_states)
 
     if not knowledge_df.empty:
-        # Create a pivot-like view for better readability
         for observer in sorted(agent_states.keys(), key=lambda x: int(x.split("-")[1])):
             observer_data = knowledge_df[knowledge_df["Observer"] == observer]
             if not observer_data.empty:
@@ -247,15 +227,14 @@ def render_knowledge_table() -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="Cow Herd Monitoring Dashboard",
+        page_title="Cow Herd Monitoring",
         page_icon="🐄",
         layout="wide",
     )
 
-    st.title("🐄 Cow Herd Monitoring Dashboard")
-    st.markdown("Real-time monitoring of cow agent locations, health, and knowledge propagation")
+    st.title("🐄 Cow Herd Monitoring")
+    st.markdown("Real-time monitoring of cow agent locations, health, and *cow2cow* knowledge propagation")
 
-    # Create two columns for layout
     col1, col2 = st.columns([1, 1])
 
     with col1:
