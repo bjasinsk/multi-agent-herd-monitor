@@ -11,12 +11,22 @@ from spade.message import Message
 
 
 class CowAgent(agent.Agent):
-    def __init__(self, jid: str, password: str, cow_id: str, boundaries: Tuple[float, float, float, float]) -> None:
+    def __init__(
+        self,
+        jid: str,
+        password: str,
+        cow_id: str,
+        boundaries: Tuple[float, float, float, float],
+        *,
+        mutation_probability: float = 0.02,
+        send_delay_seconds: float = 0.5,
+    ) -> None:
         super().__init__(jid, password)
         self.cow_id: str = cow_id
         self.known_agents: List[str] = []  # List of other agents to broadcast to
         self.boundaries: Tuple[float, float, float, float] = boundaries  # (lat_min, lat_max, lon_min, lon_max)
-
+        self.mutation_probability: float = mutation_probability
+        self.send_delay_seconds: float = send_delay_seconds
         # Initialize own properties
         self.location: Tuple[float, float] = self._random_location()
         self.health: str = random.choice(["healthy", "unhealthy"])
@@ -53,6 +63,7 @@ class CowAgent(agent.Agent):
             "health": self.health,
             "boundaries": self.boundaries,
             "timestamp": self.timestamp,
+            "peers": self.known_agents,  # Add peer list to state
         }
 
     def dump_state_to_file(self) -> None:
@@ -68,7 +79,7 @@ class CowAgent(agent.Agent):
 
     def mutate_property(self) -> None:
         """Randomly mutate one of cow's properties"""
-        property_choice = random.choice(["location", "health"])
+        property_choice = random.choices(["location", "health"], weights=[0.9, 0.1])[0]
 
         if property_choice == "location":
             self.location = self._mutate_location()
@@ -104,10 +115,9 @@ class CowAgent(agent.Agent):
 
     class BroadcastBehaviour(CyclicBehaviour):
         async def run(self) -> None:
-            # Wait random interval between 5-10 seconds
-            await asyncio.sleep(random.uniform(5, 10))
+            await asyncio.sleep(1)
 
-            if self.agent.known_agents:
+            if self.agent.known_agents and random.random() < self.agent.mutation_probability:
                 # Randomly mutate a property
                 self.agent.mutate_property()
 
@@ -126,7 +136,7 @@ class CowAgent(agent.Agent):
 
                 own_state = self.agent.state[self.agent.cow_id]
                 print(
-                    f"Cow {self.agent.cow_id}: Updated property - Location: {own_state['location']}, Health: {own_state['health']}"
+                    f"{self.agent.cow_id:<7} UPDATED ({own_state['location'][0]:.5f}, {own_state['location'][1]:.5f}) {own_state['health']}, propagate to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
                 )
 
     class ListenBehaviour(CyclicBehaviour):
@@ -146,30 +156,33 @@ class CowAgent(agent.Agent):
                         # Dump updated state to file
                         self.agent.dump_state_to_file()
 
-                    print(f"Cow {self.agent.cow_id}: Received state from Cow {sender_id}")
-
                     # If state changed, propagate to other peers
-                    if state_changed and random.random() < 0.5:
-                        print(f"Cow {self.agent.cow_id}: State updated, propagating to peers")
+                    if state_changed:
+                        outbound_peers = [p for p in self.agent.known_agents if p != str(msg.sender).split("/")[0]]
 
-                        # Broadcast updated state to all peers
-                        await asyncio.sleep(0.5)
-                        state_message = {"state": self.agent.state, "sender": self.agent.cow_id}
+                        if outbound_peers:
+                            print(
+                                f"{self.agent.cow_id:<7} Received update from {sender_id:<7}, propagate to {', '.join([p.split('@')[0] for p in outbound_peers])}"
+                            )
+                            await asyncio.sleep(self.agent.send_delay_seconds)
+                            state_message = {"state": self.agent.state, "sender": self.agent.cow_id}
 
-                        for peer_jid in self.agent.known_agents:
-                            # Don't send back to the sender
-                            if peer_jid != str(msg.sender).split("/")[0]:
+                            for peer_jid in outbound_peers:
                                 propagate_msg = Message(to=peer_jid)
                                 propagate_msg.set_metadata("performative", "inform")
                                 propagate_msg.set_metadata("ontology", "cow_state")
                                 propagate_msg.body = json.dumps(state_message)
                                 await self.send(propagate_msg)
+                        else:
+                            print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}, nowhere to propagate")
+                    else:
+                        print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
 
                 except json.JSONDecodeError:
-                    print(f"Cow {self.agent.cow_id}: Received malformed message")
+                    print(f"Cow {self.agent.cow_id:<7} Received malformed message")
 
     async def setup(self) -> None:
-        print(f"Cow {self.cow_id} starting:")
+        print(f"{self.cow_id} starting:")
         print(f"  Location: {self.location}")
         print(f"  Health: {self.health}")
         print(f"  Boundaries: {self.boundaries}")

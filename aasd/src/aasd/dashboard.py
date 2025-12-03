@@ -6,6 +6,11 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
+# How often to update the map and "global" state table
+MAP_UPDATE_INTERVAL_SECONDS = 0.5
+# How often to update the knowledge consistency table
+TABLE_UPDATE_INTERVAL_SECONDS = 0.2
+
 
 def load_agent_states(state_dir: Path) -> Dict[str, Dict[str, Any]]:
     """Load all agent states from JSON files"""
@@ -88,7 +93,7 @@ def build_knowledge_consistency_data(agent_states: Dict[str, Dict[str, Any]]) ->
     return pd.DataFrame(rows)
 
 
-@st.fragment(run_every=0.1)
+@st.fragment(run_every=MAP_UPDATE_INTERVAL_SECONDS)
 def render_location_plot() -> None:
     """Render the location plot with auto-refresh"""
     state_dir = Path("state")
@@ -130,13 +135,45 @@ def render_location_plot() -> None:
         # Rename columns for pydeck
         df = df.rename(columns={"latitude": "lat", "longitude": "lon"})
 
+        # Build peer connection lines
+        peer_lines = []
+        for cow_id, state in actual_states.items():
+            peers = state.get("peers", [])
+            cow_location = state.get("location", (0, 0))
+
+            for peer_jid in peers:
+                # Extract peer cow_id from JID (e.g., "cow1@localhost" -> "Cow-1")
+                peer_num = peer_jid.split("@")[0].replace("cow", "")
+                peer_cow_id = f"Cow-{peer_num}"
+
+                # Only draw line if peer exists and avoid duplicates (only draw from lower to higher ID)
+                if peer_cow_id in actual_states and cow_id < peer_cow_id:
+                    peer_location = actual_states[peer_cow_id].get("location", (0, 0))
+                    peer_lines.append(
+                        {
+                            "start": [cow_location[1], cow_location[0]],  # [lon, lat]
+                            "end": [peer_location[1], peer_location[0]],  # [lon, lat]
+                        }
+                    )
+
+        # Create LineLayer for peer connections
+        line_layer = pdk.Layer(
+            "LineLayer",
+            peer_lines,
+            get_source_position="start",
+            get_target_position="end",
+            get_color=[100, 100, 255, 150],  # Blue with transparency
+            get_width=2,
+            pickable=False,
+        )
+
         # Create semi-transparent circle layer behind text
         circle_layer = pdk.Layer(
             "ScatterplotLayer",
             df,
             get_position=["lon", "lat"],
             get_fill_color="color",
-            get_radius=100,
+            get_radius=70,
             pickable=True,
             opacity=0.4,
             stroked=True,
@@ -163,9 +200,9 @@ def render_location_plot() -> None:
             pitch=0,
         )
 
-        # Create deck with circle layer first (behind) and text layer on top
+        # Create deck with layers: lines in back, then circles, then text on top
         deck = pdk.Deck(
-            layers=[circle_layer, text_layer],
+            layers=[line_layer, circle_layer, text_layer],
             initial_view_state=view_state,
             # map_style="mapbox://styles/mapbox/light-v9",
         )
@@ -181,7 +218,7 @@ def render_location_plot() -> None:
         )
 
 
-@st.fragment(run_every=0.1)
+@st.fragment(run_every=TABLE_UPDATE_INTERVAL_SECONDS)
 def render_knowledge_table() -> None:
     """Render the knowledge consistency table with auto-refresh"""
     state_dir = Path("state")
@@ -197,7 +234,7 @@ def render_knowledge_table() -> None:
 
     if not knowledge_df.empty:
         # Create a pivot-like view for better readability
-        for observer in sorted(agent_states.keys()):
+        for observer in sorted(agent_states.keys(), key=lambda x: int(x.split("-")[1])):
             observer_data = knowledge_df[knowledge_df["Observer"] == observer]
             if not observer_data.empty:
                 with st.expander(f"📋 {observer}'s Knowledge", expanded=True):
