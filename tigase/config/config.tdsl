@@ -1,9 +1,9 @@
 admins = [
-    'admin@localhost'
+    'admin@server_hello'
 ]
 'config-type' = 'default'
 debug = [ 'server' ]
-'default-virtual-host' = 'localhost'
+'default-virtual-host' = 'server_hello'
 dataSource () {
     default () {
         uri = 'jdbc:derby:derby;create=true'

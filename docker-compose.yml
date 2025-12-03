@@ -1,39 +1,25 @@
 version: '3.8'
 services:
-  tigase-server:
+  server_hello:
     image: tigase/tigase-xmpp-server:8.0.0
     ports:
-      - "8080:8080"  # Web interface
-      - "5222:5222"  # Client connections
-      - "5269:5269"  # Server to server
+      - "8480:8080"
+      - "5422:5222"
     environment:
       - DB_ROOT_USER=admin
       - DB_ROOT_PASS=admin
-      - ADMIN_JID=admin@localhost
+      - ADMIN_JID=admin@server_hello
       - ADMIN_PASSWORD=admin
     volumes:
       - ./tigase/config/tigase.conf:/home/tigase/tigase-server/etc/tigase.conf
       - ./tigase/config/config.tdsl:/home/tigase/tigase-server/etc/config.tdsl
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - spade-network
 
-  stateful-agents:
-    build: .
-    depends_on:
-      - tigase-server
-    environment:
-      - XMPP_SERVER=tigase-server
-    networks:
-      - spade-network
-    # Override command for different examples
-    # command: python -u examples.py
-    # command: python -u monitor_states.py
 
-networks:
-  spade-network:
-    driver: bridge
+
+  spade_hello:
+    image: spade_hello:latest
+    deploy:
+      resources:
+        limits:
+          cpus: ${CPUS}
+          memory: 512MB
