@@ -1,0 +1,176 @@
+import asyncio
+import spade
+from spade import agent
+from spade.message import Message
+from spade.behaviour import CyclicBehaviour
+import random
+import json
+import time
+
+class CowAgent(agent.Agent):
+    def __init__(self, jid, password, cow_id, boundaries):
+        super().__init__(jid, password)
+        self.cow_id = cow_id
+        self.known_agents = []  # List of other agents to broadcast to
+        self.boundaries = boundaries  # (lat_min, lat_max, lon_min, lon_max)
+        
+        # Initialize own properties
+        self.location = self._random_location()
+        self.health = random.choice(['healthy', 'unhealthy'])
+        self.timestamp = time.time()
+        
+        # State: knowledge about all cows (including self)
+        self.state = {
+            self.cow_id: self._get_own_state()
+        }
+        
+    def _random_location(self):
+        """Generate random location within boundaries"""
+        lat_min, lat_max, lon_min, lon_max = self.boundaries
+        lat = random.uniform(lat_min, lat_max)
+        lon = random.uniform(lon_min, lon_max)
+        return (lat, lon)
+    
+    def _get_own_state(self):
+        """Get current state of this cow"""
+        return {
+            'location': self.location,
+            'health': self.health,
+            'boundaries': self.boundaries,
+            'timestamp': self.timestamp
+        }
+    
+    def add_peer(self, peer_jid):
+        """Add a peer agent to broadcast to"""
+        if peer_jid not in self.known_agents:
+            self.known_agents.append(peer_jid)
+    
+    def mutate_property(self):
+        """Randomly mutate one of cow's properties"""
+        property_choice = random.choice(['location', 'health'])
+        
+        if property_choice == 'location':
+            self.location = self._random_location()
+        elif property_choice == 'health':
+            self.health = random.choice(['healthy', 'unhealthy'])
+        
+        self.timestamp = time.time()
+        self.state[self.cow_id] = self._get_own_state()
+        
+    def consolidate_state(self, received_state):
+        """
+        Consolidate received state with current state based on timestamps.
+        Returns True if state changed.
+        """
+        state_changed = False
+        
+        for cow_id, cow_data in received_state.items():
+            # Never update own properties
+            if cow_id == self.cow_id:
+                continue
+            
+            # If we don't know about this cow, add it
+            if cow_id not in self.state:
+                self.state[cow_id] = cow_data
+                state_changed = True
+            else:
+                # Compare timestamps - newer wins
+                if cow_data['timestamp'] > self.state[cow_id]['timestamp']:
+                    self.state[cow_id] = cow_data
+                    state_changed = True
+        
+        return state_changed
+            
+    class BroadcastBehaviour(CyclicBehaviour):
+        async def run(self):
+            # Wait random interval between 5-10 seconds
+            await asyncio.sleep(random.uniform(5, 10))
+            
+            if self.agent.known_agents:
+                # Randomly mutate a property
+                self.agent.mutate_property()
+                
+                # Broadcast current state to all peers
+                state_message = {
+                    'state': self.agent.state,
+                    'sender': self.agent.cow_id
+                }
+                
+                for peer_jid in self.agent.known_agents:
+                    msg = Message(to=peer_jid)
+                    msg.set_metadata('performative', 'inform')
+                    msg.set_metadata('ontology', 'cow_state')
+                    msg.body = json.dumps(state_message)
+                    await self.send(msg)
+                
+                own_state = self.agent.state[self.agent.cow_id]
+                print(f"Cow {self.agent.cow_id}: Updated property - Location: {own_state['location']}, Health: {own_state['health']}")
+    
+    class ListenBehaviour(CyclicBehaviour):
+        async def run(self):
+            # Listen for state broadcasts from other cows
+            msg = await self.receive(timeout=1)
+            if msg and msg.get_metadata('ontology') == 'cow_state':
+                try:
+                    data = json.loads(msg.body)
+                    received_state = data['state']
+                    sender_id = data['sender']
+                    
+                    # Consolidate received state with current state
+                    state_changed = self.agent.consolidate_state(received_state)
+                    
+                    print(f"Cow {self.agent.cow_id}: Received state from Cow {sender_id}")
+                    
+                    # If state changed, propagate to other peers
+                    if state_changed:
+                        print(f"Cow {self.agent.cow_id}: State updated, propagating to peers")
+                        
+                        # Broadcast updated state to all peers
+                        state_message = {
+                            'state': self.agent.state,
+                            'sender': self.agent.cow_id
+                        }
+                        
+                        for peer_jid in self.agent.known_agents:
+                            # Don't send back to the sender
+                            if peer_jid != str(msg.sender).split('/')[0]:
+                                propagate_msg = Message(to=peer_jid)
+                                propagate_msg.set_metadata('performative', 'inform')
+                                propagate_msg.set_metadata('ontology', 'cow_state')
+                                propagate_msg.body = json.dumps(state_message)
+                                await self.send(propagate_msg)
+                
+                except json.JSONDecodeError:
+                    print(f"Cow {self.agent.cow_id}: Received malformed message")
+    
+    async def setup(self):
+        print(f"Cow {self.cow_id} starting:")
+        print(f"  Location: {self.location}")
+        print(f"  Health: {self.health}")
+        print(f"  Boundaries: {self.boundaries}")
+        self.add_behaviour(self.BroadcastBehaviour())
+        self.add_behaviour(self.ListenBehaviour())
+
+# Legacy agents (keeping for compatibility)
+class SenderAgent(agent.Agent):
+    class SendBehaviour(CyclicBehaviour):
+        async def run(self):
+            while True:
+                msg = Message(to='receiver@localhost')
+                msg.set_metadata('content', 'Hello World!')
+                await self.send(msg)
+                await asyncio.sleep(1)
+
+    async def setup(self):
+        self.add_behaviour(self.SendBehaviour())
+
+class ReceiverAgent(agent.Agent):
+    class ReceiveBehaviour(CyclicBehaviour):
+        async def run(self):
+            while True:
+                msg = await self.receive(timeout=10)
+                if msg:
+                    print(f'Received: {msg.metadata["content"]}')
+
+    async def setup(self):
+        self.add_behaviour(self.ReceiveBehaviour())

@@ -1,24 +1,76 @@
-# AASD-25Z-WBDT
+# AASD-25Z-WBDT - SPADE Stateful Agents
 
+This project demonstrates SPADE agents with internal state that can broadcast their state to other agents of the same kind.
 
+## Features
 
-## Getting started
+- **StatefulAgent**: A SPADE agent with internal integer state
+- **State Broadcasting**: Agents periodically broadcast their state to peer agents
+- **State Updates**: Internal state changes over time (simulating some process)
+- **Multi-Agent Communication**: Support for networks of multiple communicating agents
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Files
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- `agent.py` - Main agent implementations including StatefulAgent
+- `main.py` - Simple example of running stateful agents
+- `examples.py` - More comprehensive examples and usage patterns
+- `requirements.txt` - Python dependencies
 
-## Add your files
+## Quick Start
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+1. Install dependencies:
+```bash
+pip install -r requirements.txt
 ```
-cd existing_repo
-git remote add origin https://gitlab-stud.elka.pw.edu.pl/bjasinsk/aasd-25z-wbdt.git
-git branch -M main
-git push -uf origin main
+
+2. Run the simple example:
+```bash
+python main.py
 ```
+
+3. Run comprehensive examples:
+```bash
+python examples.py
+```
+
+## StatefulAgent Class
+
+The `StatefulAgent` class provides:
+
+- **Internal State**: An integer variable that represents the agent's state
+- **State Broadcasting**: Periodic broadcasting of state to known peer agents  
+- **Peer Management**: Methods to add peer agents for communication
+- **State Listening**: Receives and processes state broadcasts from other agents
+
+### Usage Example
+
+```python
+# Create agents
+agent1 = StatefulAgent('agent1@localhost', 'password', 1)
+agent2 = StatefulAgent('agent2@localhost', 'password', 2)
+
+# Set up peer relationships
+agent1.add_peer('agent2@localhost')
+agent2.add_peer('agent1@localhost')
+
+# Start agents
+await agent1.start()
+await agent2.start()
+```
+
+## How It Works
+
+1. Each agent starts with a random integer state (1-100)
+2. Every 3 seconds, agents broadcast their current state to all known peers
+3. Agents also listen for broadcasts from other agents
+4. The internal state changes over time (±5 random adjustment each broadcast)
+5. All communication uses JSON messages with XMPP protocol via SPADE
+
+## Architecture
+
+- **BroadcastBehaviour**: Cyclical behavior that updates and broadcasts agent state
+- **ListenBehaviour**: Cyclical behavior that receives state broadcasts from peers
+- **Peer Management**: Simple list-based tracking of known agent JIDs
 
 ## Integrate with your tools
 
