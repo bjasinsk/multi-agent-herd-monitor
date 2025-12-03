@@ -96,7 +96,7 @@ class CowAgent(agent.Agent):
                     'sender': self.agent.cow_id
                 }
                 
-                for peer_jid in self.agent.known_agents:
+                for peer_jid in random.choices(self.agent.known_agents, k=2):
                     msg = Message(to=peer_jid)
                     msg.set_metadata('performative', 'inform')
                     msg.set_metadata('ontology', 'cow_state')
@@ -104,7 +104,7 @@ class CowAgent(agent.Agent):
                     await self.send(msg)
                 
                 own_state = self.agent.state[self.agent.cow_id]
-                print(f"Cow {self.agent.cow_id}: Updated property - Location: {own_state['location']}, Health: {own_state['health']}")
+                # print(f"Cow {self.agent.cow_id}: Updated property - Location: {own_state['location']}, Health: {own_state['health']}")
     
     class ListenBehaviour(CyclicBehaviour):
         async def run(self):
@@ -119,19 +119,20 @@ class CowAgent(agent.Agent):
                     # Consolidate received state with current state
                     state_changed = self.agent.consolidate_state(received_state)
                     
-                    print(f"Cow {self.agent.cow_id}: Received state from Cow {sender_id}")
+                    # print(f"Cow {self.agent.cow_id}: Received state from Cow {sender_id}")
                     
                     # If state changed, propagate to other peers
-                    if state_changed:
-                        print(f"Cow {self.agent.cow_id}: State updated, propagating to peers")
+                    if state_changed and random.random() < 0.5:
+                        # print(f"Cow {self.agent.cow_id}: State updated, propagating to peers")
                         
                         # Broadcast updated state to all peers
+                        await asyncio.sleep(0.5)
                         state_message = {
                             'state': self.agent.state,
                             'sender': self.agent.cow_id
                         }
                         
-                        for peer_jid in self.agent.known_agents:
+                        for peer_jid in random.choices(self.agent.known_agents, k=2):
                             # Don't send back to the sender
                             if peer_jid != str(msg.sender).split('/')[0]:
                                 propagate_msg = Message(to=peer_jid)
@@ -150,27 +151,3 @@ class CowAgent(agent.Agent):
         print(f"  Boundaries: {self.boundaries}")
         self.add_behaviour(self.BroadcastBehaviour())
         self.add_behaviour(self.ListenBehaviour())
-
-# Legacy agents (keeping for compatibility)
-class SenderAgent(agent.Agent):
-    class SendBehaviour(CyclicBehaviour):
-        async def run(self):
-            while True:
-                msg = Message(to='receiver@localhost')
-                msg.set_metadata('content', 'Hello World!')
-                await self.send(msg)
-                await asyncio.sleep(1)
-
-    async def setup(self):
-        self.add_behaviour(self.SendBehaviour())
-
-class ReceiverAgent(agent.Agent):
-    class ReceiveBehaviour(CyclicBehaviour):
-        async def run(self):
-            while True:
-                msg = await self.receive(timeout=10)
-                if msg:
-                    print(f'Received: {msg.metadata["content"]}')
-
-    async def setup(self):
-        self.add_behaviour(self.ReceiveBehaviour())

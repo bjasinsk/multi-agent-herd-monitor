@@ -1,0 +1,20 @@
+admins = [
+    'admin@localhost'
+]
+'config-type' = 'default'
+debug = [ 'server' ]
+'default-virtual-host' = 'localhost'
+dataSource () {
+    default () {
+        uri = 'jdbc:derby:derby;create=true'
+    }
+}
+http () {
+    setup () {
+        'admin-password' = 'admin'
+        'admin-user' = 'admin'
+    }
+}
+pubsub () {
+    trusted = [ 'http@{clusterNode}' ]
+}
