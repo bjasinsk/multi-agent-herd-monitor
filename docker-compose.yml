@@ -8,7 +8,7 @@ services:
     environment:
       - DB_ROOT_USER=admin
       - DB_ROOT_PASS=admin
-      - ADMIN_JID=admin@server_hello 
+      - ADMIN_JID=admin@server_hello
       - ADMIN_PASSWORD=admin
     volumes:
       - ./tigase/config/tigase.conf:/home/tigase/tigase-server/etc/tigase.conf
