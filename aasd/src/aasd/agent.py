@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import random
 import time
 from enum import Enum
+from functools import partial
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Self
+from typing import Any, Callable, NamedTuple, Self
 
 from spade import agent
-from spade.behaviour import CyclicBehaviour
+from spade.behaviour import CyclicBehaviour, PeriodicBehaviour
 from spade.message import Message
 
 
@@ -35,6 +37,20 @@ class Location(NamedTuple):
     latitude: float
     longitude: float
 
+    def distance_to(self, other: Location) -> float:
+        """Calculate distance to another location in meters using Haversine formula"""
+        R = 6371000
+        phi1 = math.radians(self.latitude)
+        phi2 = math.radians(other.latitude)
+        delta_phi = math.radians(other.latitude - self.latitude)
+        delta_lambda = math.radians(other.longitude - self.longitude)
+
+        a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+        dist = R * c
+        return dist
+
 
 class CowState(NamedTuple):
     """State of a cow at a specific point in time"""
@@ -43,9 +59,9 @@ class CowState(NamedTuple):
     health: HealthStatus
     boundaries: Boundaries
     timestamp: float
-    peers: List[str]
+    peers: list[str]
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         """Convert a CowState object to dict for JSON serialization"""
         return {
             "location": {
@@ -64,7 +80,7 @@ class CowState(NamedTuple):
         }
 
     @classmethod
-    def from_json(cls, cow_data: Dict[str, Any]) -> Self:
+    def from_json(cls, cow_data: dict[str, Any]) -> Self:
         """Convert a dict to CowState object"""
         location_data = cow_data["location"]
         boundaries_data = cow_data["boundaries"]
@@ -91,6 +107,7 @@ class CowAgent(agent.Agent):
         boundaries: Boundaries,
         initial_location: Location,
         initial_health: HealthStatus,
+        get_peer_jids_in_range_fn: Callable[[str], list[str]],
         *,
         mutation_probability: float = 0.02,
         send_delay_seconds: float = 0.5,
@@ -98,12 +115,12 @@ class CowAgent(agent.Agent):
     ) -> None:
         super().__init__(jid, password)
         self.cow_id: str = cow_id
-        self.known_agents: List[str] = []
+        self.known_agents: list[str] = []
         self.boundaries: Boundaries = boundaries
         self.mutation_probability: float = mutation_probability
         self.send_delay_seconds: float = send_delay_seconds
 
-        self.global_state: Dict[str, CowState] = {
+        self.global_state: dict[str, CowState] = {
             self.cow_id: CowState(
                 location=initial_location,
                 health=initial_health,
@@ -117,6 +134,10 @@ class CowAgent(agent.Agent):
         self.state_dump_dir: Path = Path("state")
         if dump_state:
             self.state_dump_dir.mkdir(exist_ok=True)
+
+        self.get_peer_jids_in_range = partial(get_peer_jids_in_range_fn, self.cow_id)
+
+        self.state_needs_broadcast_event = asyncio.Event()
 
     @property
     def state(self) -> CowState:
@@ -134,50 +155,38 @@ class CowAgent(agent.Agent):
         with open(state_file, "w") as f:
             json.dump(self.global_state_dict, f, indent=2)
 
-    def add_peer(self, peer_jid: str) -> None:
-        """Add a peer agent to broadcast to"""
-        if peer_jid not in self.known_agents:
-            self.known_agents.append(peer_jid)
-            own_state = self.state
-            self.global_state[self.cow_id] = CowState(
-                location=own_state.location,
-                health=own_state.health,
-                boundaries=own_state.boundaries,
-                timestamp=own_state.timestamp,
-                peers=self.known_agents.copy(),
-            )
+    def set_peers(self, peer_jids: list[str]) -> None:
+        self.known_agents = peer_jids
+        own_state = self.state
+        self.global_state[self.cow_id] = CowState(
+            location=own_state.location,
+            health=own_state.health,
+            boundaries=own_state.boundaries,
+            timestamp=own_state.timestamp,
+            peers=self.known_agents.copy(),
+        )
 
     @property
-    def global_state_dict(self) -> Dict[str, Dict[str, Any]]:
+    def global_state_dict(self) -> dict[str, dict[str, Any]]:
         """Convert internal CowState objects to dict for JSON serialization"""
         return {cow_id: cow_state.to_json() for cow_id, cow_state in self.global_state.items()}
 
     # Dummy to replace healthchecker, mapgenerator, etc - just make the state change by itself
-    class MutateRole(CyclicBehaviour):
+    class MutateBehaviour(PeriodicBehaviour):
         agent: CowAgent
 
         async def run(self) -> None:
-            await asyncio.sleep(1)
+            if not self.agent.known_agents or random.random() > self.agent.mutation_probability:
+                return
 
-            if self.agent.known_agents and random.random() < self.agent.mutation_probability:
-                self.mutate_random_property()
+            self.mutate_random_property()
 
-                if self.agent.dump_state:
-                    self.agent.dump_state_to_file()
+            own_state = self.agent.global_state[self.agent.cow_id]
+            print(
+                f"{self.agent.cow_id:<7} UPDATED ({own_state.location.latitude:.5f}, {own_state.location.longitude:.5f}) {own_state.health.value}"
+            )
 
-                state_message = {"state": self.agent.global_state_dict, "sender": self.agent.cow_id}
-
-                for peer_jid in self.agent.known_agents:
-                    msg = Message(to=peer_jid)
-                    msg.set_metadata("performative", "inform")
-                    msg.set_metadata("ontology", "cow_state")
-                    msg.body = json.dumps(state_message)
-                    await self.send(msg)
-
-                own_state = self.agent.global_state[self.agent.cow_id]
-                print(
-                    f"{self.agent.cow_id:<7} UPDATED ({own_state.location.latitude:.5f}, {own_state.location.longitude:.5f}) {own_state.health.value}, propagate to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
-                )
+            self.agent.state_needs_broadcast_event.set()
 
         def mutate_random_property(self) -> None:
             """Randomly mutate one of cow's properties"""
@@ -210,47 +219,37 @@ class CowAgent(agent.Agent):
                 peers=self.agent.known_agents.copy(),
             )
 
-    class InterCowCommunicatorRole(CyclicBehaviour):
+    class ReceiveStateUpdateBehaviour(CyclicBehaviour):
         agent: CowAgent
 
         async def run(self) -> None:
             msg = await self.receive(timeout=1)
-            if msg and msg.get_metadata("ontology") == "cow_state":
-                try:
-                    data = json.loads(msg.body)
-                    received_state = data["state"]
-                    sender_id = data["sender"]
 
-                    state_changed = self.consolidate_state(received_state)
+            if not msg:
+                return
 
-                    if state_changed and self.agent.dump_state:
-                        self.agent.dump_state_to_file()
+            if msg.get_metadata("ontology") != "cow_state":
+                raise RuntimeError(f"Unknown ontology: {msg.get_metadata('ontology')}")
 
-                    if state_changed:
-                        outbound_peers = [p for p in self.agent.known_agents if p != str(msg.sender).split("/")[0]]
+            try:
+                data = json.loads(msg.body)
+            except json.JSONDecodeError:
+                print(f"Cow {self.agent.cow_id:<7} Received malformed message")
 
-                        if outbound_peers:
-                            print(
-                                f"{self.agent.cow_id:<7} Received update from {sender_id:<7}, propagate to {', '.join([p.split('@')[0] for p in outbound_peers])}"
-                            )
-                            await asyncio.sleep(self.agent.send_delay_seconds)
-                            state_message = {"state": self.agent.global_state_dict, "sender": self.agent.cow_id}
+            received_state = data["state"]
+            sender_id = data["sender"]
 
-                            for peer_jid in outbound_peers:
-                                propagate_msg = Message(to=peer_jid)
-                                propagate_msg.set_metadata("performative", "inform")
-                                propagate_msg.set_metadata("ontology", "cow_state")
-                                propagate_msg.body = json.dumps(state_message)
-                                await self.send(propagate_msg)
-                        else:
-                            print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}, nowhere to propagate")
-                    else:
-                        print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
+            state_changed = self.consolidate_state(received_state)
 
-                except json.JSONDecodeError:
-                    print(f"Cow {self.agent.cow_id:<7} Received malformed message")
+            if not state_changed:
+                print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
+                return
 
-        def consolidate_state(self, received_state: Dict[str, Dict[str, Any]]) -> bool:
+            print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}")
+
+            self.agent.state_needs_broadcast_event.set()
+
+        def consolidate_state(self, received_state: dict[str, dict[str, Any]]) -> bool:
             """
             Consolidate received state with current state based on timestamps.
             Returns True if state changed.
@@ -273,6 +272,38 @@ class CowAgent(agent.Agent):
 
             return state_changed
 
+    class BroadcastStateBehaviour(CyclicBehaviour):
+        agent: CowAgent
+
+        async def run(self) -> None:
+            await self.agent.state_needs_broadcast_event.wait()
+
+            self.agent.set_peers(self.agent.get_peer_jids_in_range())
+
+            print(
+                f"{self.agent.cow_id:<7} Propagate state change to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
+            )
+
+            if self.agent.dump_state:
+                self.agent.dump_state_to_file()
+
+            await asyncio.sleep(self.agent.send_delay_seconds)
+
+            self.agent.state_needs_broadcast_event.clear()
+
+            msg_metadata = {"performative": "inform", "ontology": "cow_state", "language": "json"}
+
+            msg_body = json.dumps(
+                {
+                    "state": self.agent.global_state_dict,
+                    "sender": self.agent.cow_id,
+                }
+            )
+
+            for peer_jid in self.agent.get_peer_jids_in_range():
+                msg = Message(to=peer_jid, sender=self.agent.jid, metadata=msg_metadata, body=msg_body)
+                asyncio.create_task(self.send(msg))
+
     async def setup(self) -> None:
         own_state = self.state
         print(f"{self.cow_id} starting:")
@@ -284,5 +315,6 @@ class CowAgent(agent.Agent):
         if self.dump_state:
             self.dump_state_to_file()
 
-        self.add_behaviour(self.MutateRole())
-        self.add_behaviour(self.InterCowCommunicatorRole())
+        self.add_behaviour(self.MutateBehaviour(period=1.0))
+        self.add_behaviour(self.ReceiveStateUpdateBehaviour())
+        self.add_behaviour(self.BroadcastStateBehaviour())
