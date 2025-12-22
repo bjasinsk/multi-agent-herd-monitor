@@ -77,9 +77,6 @@ async def _main() -> None:
         cows[cow.cow_id] = cow
 
     for cow in cows.values():
-        cow.set_peers(cow.get_peer_jids_in_range())
-
-    for cow in cows.values():
         await cow.start()
 
     print(f"\nAll {NUM_AGENTS} cows started. They will update properties at random intervals.")

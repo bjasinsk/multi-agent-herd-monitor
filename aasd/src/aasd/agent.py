@@ -13,6 +13,7 @@ from typing import Any, Callable, NamedTuple, Self
 from spade import agent
 from spade.behaviour import CyclicBehaviour, PeriodicBehaviour
 from spade.message import Message
+from spade.template import Template
 
 
 class HealthStatus(Enum):
@@ -155,8 +156,11 @@ class CowAgent(agent.Agent):
         with open(state_file, "w") as f:
             json.dump(self.global_state_dict, f, indent=2)
 
-    def set_peers(self, peer_jids: list[str]) -> None:
-        self.known_agents = peer_jids
+    def add_peer(self, peer_jid: str) -> bool:
+        if peer_jid in self.known_agents:
+            return False
+
+        self.known_agents.append(peer_jid)
         own_state = self.state
         self.global_state[self.cow_id] = CowState(
             location=own_state.location,
@@ -165,6 +169,22 @@ class CowAgent(agent.Agent):
             timestamp=own_state.timestamp,
             peers=self.known_agents.copy(),
         )
+        return True
+
+    def remove_peer(self, peer_jid: str) -> bool:
+        if peer_jid not in self.known_agents:
+            return False
+
+        self.known_agents.remove(peer_jid)
+        own_state = self.state
+        self.global_state[self.cow_id] = CowState(
+            location=own_state.location,
+            health=own_state.health,
+            boundaries=own_state.boundaries,
+            timestamp=own_state.timestamp,
+            peers=self.known_agents.copy(),
+        )
+        return True
 
     @property
     def global_state_dict(self) -> dict[str, dict[str, Any]]:
@@ -228,9 +248,6 @@ class CowAgent(agent.Agent):
             if not msg:
                 return
 
-            if msg.get_metadata("ontology") != "cow_state":
-                raise RuntimeError(f"Unknown ontology: {msg.get_metadata('ontology')}")
-
             try:
                 data = json.loads(msg.body)
             except json.JSONDecodeError:
@@ -278,8 +295,6 @@ class CowAgent(agent.Agent):
         async def run(self) -> None:
             await self.agent.state_needs_broadcast_event.wait()
 
-            self.agent.set_peers(self.agent.get_peer_jids_in_range())
-
             print(
                 f"{self.agent.cow_id:<7} Propagate state change to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
             )
@@ -300,9 +315,46 @@ class CowAgent(agent.Agent):
                 }
             )
 
+            # MOCK: remove subscribers that are out of range
+            for subscriber in set(self.agent.known_agents) - set(self.agent.get_peer_jids_in_range()):
+                self.agent.remove_peer(subscriber)
+                print(f"{self.agent.cow_id:<7} Removed subscriber {subscriber}")
+
+            for peer_jid in self.agent.known_agents:
+                msg = Message(to=peer_jid, sender=self.agent.jid, metadata=msg_metadata, body=msg_body)
+                asyncio.create_task(self.send(msg))
+
+    class SubscribeToPeerUpdatesBehaviour(PeriodicBehaviour):
+        agent: CowAgent
+
+        async def run(self) -> None:
+            msg_metadata = {"performative": "subscribe", "ontology": "cow_state", "language": "json"}
+            msg_body = json.dumps(
+                {
+                    "sender": self.agent.cow_id,
+                }
+            )
+
+            # MOCK: subscribe to all peers in range
             for peer_jid in self.agent.get_peer_jids_in_range():
                 msg = Message(to=peer_jid, sender=self.agent.jid, metadata=msg_metadata, body=msg_body)
                 asyncio.create_task(self.send(msg))
+
+    class HandleSubscriptionsBehaviour(CyclicBehaviour):
+        agent: CowAgent
+
+        async def run(self) -> None:
+            msg = await self.receive(timeout=1)
+
+            if not msg:
+                return
+
+            subscriber_jid = msg.sender
+
+            if not self.agent.add_peer(str(subscriber_jid)):
+                return
+
+            print(f"{self.agent.cow_id:<7} Added subscriber {str(subscriber_jid)}")
 
     async def setup(self) -> None:
         own_state = self.state
@@ -316,5 +368,17 @@ class CowAgent(agent.Agent):
             self.dump_state_to_file()
 
         self.add_behaviour(self.MutateBehaviour(period=1.0))
-        self.add_behaviour(self.ReceiveStateUpdateBehaviour())
+
         self.add_behaviour(self.BroadcastStateBehaviour())
+
+        state_broadcast_template = Template()
+        state_broadcast_template.set_metadata("ontology", "cow_state")
+        state_broadcast_template.set_metadata("performative", "inform")
+        self.add_behaviour(self.ReceiveStateUpdateBehaviour(), template=state_broadcast_template)
+
+        self.add_behaviour(self.SubscribeToPeerUpdatesBehaviour(period=10.0))
+
+        subscription_template = Template()
+        subscription_template.set_metadata("ontology", "cow_state")
+        subscription_template.set_metadata("performative", "subscribe")
+        self.add_behaviour(self.HandleSubscriptionsBehaviour(), template=subscription_template)
