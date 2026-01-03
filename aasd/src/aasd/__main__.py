@@ -1,7 +1,6 @@
 import asyncio
 import math
 import random
-from typing import List, Tuple
 
 import spade
 import spade.cli
@@ -17,6 +16,8 @@ NUM_EXTRA_EDGES = 1
 MUTATION_PROBABILITY = 0.05
 # Delay between sending state updates. Set this to a higher value to actually see anything.
 SEND_DELAY_SECONDS = 0.5
+# Distance between peers that allows for communication
+PEER_DISTANCE_THRESHOLD_METERS = 1000.0
 
 
 def calculate_distance(loc1: Location, loc2: Location) -> float:
@@ -36,45 +37,6 @@ def random_health() -> HealthStatus:
     return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
 
 
-def build_minimum_spanning_tree(cows: List[CowAgent]) -> List[Tuple[int, int]]:
-    """
-    Build a minimum spanning tree using Prim's algorithm based on initial cow locations.
-    Returns a list of (cow_index_i, cow_index_j) pairs representing edges in the tree.
-    """
-    n = len(cows)
-    if n <= 1:
-        return []
-
-    # Track which nodes are in the tree
-    in_tree = [False] * n
-    in_tree[0] = True  # Start with the first cow
-
-    edges = []
-
-    # Build MST by repeatedly finding the minimum edge connecting tree to non-tree nodes
-    for _ in range(n - 1):
-        min_distance = float("inf")
-        min_edge = None
-
-        for i in range(n):
-            if not in_tree[i]:
-                continue
-            for j in range(n):
-                if in_tree[j]:
-                    continue
-
-                distance = calculate_distance(cows[i].location, cows[j].location)
-                if distance < min_distance:
-                    min_distance = distance
-                    min_edge = (i, j)
-
-        if min_edge:
-            edges.append(min_edge)
-            in_tree[min_edge[1]] = True
-
-    return edges
-
-
 async def _main() -> None:
     """
     Cow herd tracking system with state synchronization
@@ -90,71 +52,31 @@ async def _main() -> None:
         lon_max=20.494292477391095,
     )
 
-    cows = []
+    cows: dict[str, CowAgent] = {}
+
+    def get_peer_jids_in_range(cow_id: str) -> list[str]:
+        cow_location = cows[cow_id].location
+        return [
+            peer.jid.jid
+            for peer in cows.values()
+            if cow_location.distance_to(peer.location) <= PEER_DISTANCE_THRESHOLD_METERS and peer.cow_id != cow_id
+        ]
 
     for i in range(1, NUM_AGENTS + 1):
         cow = CowAgent(
-            f"cow{i}@localhost",
-            "password",
-            f"Cow-{i}",
-            boundaries,
-            random_location(boundaries),
-            random_health(),
+            jid=f"cow{i}@localhost",
+            password="password",
+            cow_id=f"Cow-{i}",
+            boundaries=boundaries,
+            initial_location=random_location(boundaries),
+            initial_health=random_health(),
             mutation_probability=MUTATION_PROBABILITY,
             send_delay_seconds=SEND_DELAY_SECONDS,
+            get_peer_jids_in_range_fn=get_peer_jids_in_range,
         )
-        cows.append(cow)
+        cows[cow.cow_id] = cow
 
-    # Build minimum spanning tree based on initial locations
-    print("Building communication tree based on initial locations...")
-    mst_edges = build_minimum_spanning_tree(cows)
-
-    edge_set = set()
-    for i, j in mst_edges:
-        edge_set.add((min(i, j), max(i, j)))
-
-    for i, j in mst_edges:
-        cow_i_jid = f"cow{i + 1}@localhost"
-        cow_j_jid = f"cow{j + 1}@localhost"
-
-        cows[i].add_peer(cow_j_jid)
-        cows[j].add_peer(cow_i_jid)
-
-        print(f"  Connected Cow-{i + 1} <-> Cow-{j + 1}")
-
-    print("\nAdding one extra connection to create a cycle...")
-
-    # Collect all candidate edges not in MST with their distances
-    candidate_edges = []
-    for i in range(len(cows)):
-        for j in range(i + 1, len(cows)):
-            edge = (i, j)
-            if edge not in edge_set:
-                distance = calculate_distance(cows[i].location, cows[j].location)
-                candidate_edges.append((distance, edge))
-
-    # Sort by distance and pick one from the cheaper half (but not the cheapest)
-    if candidate_edges:
-        candidate_edges.sort(key=lambda x: x[0])
-        # Pick an edge from the first quartile (excluding the very cheapest)
-        quartile_size = max(1, len(candidate_edges) // 4)
-        # Choose the edge at position between 1 and quartile_size
-        chosen_index = min(quartile_size // 2 + 1, len(candidate_edges) - 1)
-        extra_edges = candidate_edges[chosen_index : chosen_index + NUM_EXTRA_EDGES]
-
-        for extra_edge in extra_edges:
-            i, j = extra_edge[1]
-            cow_i_jid = f"cow{i + 1}@localhost"
-            cow_j_jid = f"cow{j + 1}@localhost"
-
-            cows[i].add_peer(cow_j_jid)
-            cows[j].add_peer(cow_i_jid)
-
-            print(
-                f"  Extra connection: Cow-{i + 1} <-> Cow-{j + 1} (creates a cycle, rank {chosen_index + 1} of {len(candidate_edges)} candidates)"
-            )
-
-    for cow in cows:
+    for cow in cows.values():
         await cow.start()
 
     print(f"\nAll {NUM_AGENTS} cows started. They will update properties at random intervals.")
@@ -165,7 +87,7 @@ async def _main() -> None:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
         print("\n\nStopping cow tracking system...")
-        for cow in cows:
+        for cow in cows.values():
             await cow.stop()
 
 
