@@ -53,6 +53,11 @@ class Location(NamedTuple):
         return dist
 
 
+class MovementMap(NamedTuple):
+    boundaries: Boundaries
+    infected_areas: list[tuple[Location, float]]
+
+
 class CowState(NamedTuple):
     """State of a cow at a specific point in time"""
 
@@ -191,6 +196,57 @@ class CowAgent(agent.Agent):
         """Convert internal CowState objects to dict for JSON serialization"""
         return {cow_id: cow_state.to_json() for cow_id, cow_state in self.global_state.items()}
 
+    def check_cow_position(self) -> bool:
+        """Check if cow stays within global boundaries"""
+        actual_location = self.state.location
+        actual_boundaries = self.state.boundaries
+
+        inside_boundaries = (
+            actual_boundaries.lat_min <= actual_location.latitude <= actual_boundaries.lat_max
+            and actual_boundaries.lon_min <= actual_location.longitude <= actual_boundaries.lon_max
+        )
+
+        return inside_boundaries
+
+    def guide_cow(self, step: float = 0.0001) -> None:
+        """
+        Guide cow back inside global boundaries
+        TODO: avoid infected cows
+        """
+        actual_location = self.state.location
+        actual_boundaries = self.state.boundaries
+
+        dx = 0.0
+        dy = 0.0
+
+        if actual_location.latitude < actual_boundaries.lat_min:
+            dx = step
+        elif actual_location.latitude > actual_boundaries.lat_max:
+            dx = -step
+
+        if actual_location.longitude < actual_boundaries.lon_min:
+            dy = step
+        elif actual_location.longitude > actual_boundaries.lon_max:
+            dy = -step
+
+        if dx == 0.0 and dy == 0.0:
+            return
+
+        new_location = Location(
+            actual_location.latitude + dx,
+            actual_location.longitude + dy,
+        )
+
+        self.global_state[self.cow_id] = CowState(
+            location=new_location,
+            health=self.state.health,
+            boundaries=actual_boundaries,
+            timestamp=time.time(),
+            peers=self.known_agents.copy(),
+        )
+
+        print(f"[{self.cow_id}] GUIDE_COW: moving back into boundaries")
+
     class ReceiveGlobalBoundariesBehaviour(CyclicBehaviour):
         agent: CowAgent
 
@@ -234,6 +290,15 @@ class CowAgent(agent.Agent):
 
                 print(f"{self.agent.cow_id} UPDATED GLOBAL BOUNDARIES FROM SHEPHERD")
                 self.agent.state_needs_broadcast_event.set()
+
+    class CowPositionLocalizerBehaviour(PeriodicBehaviour):
+        agent: CowAgent
+
+        async def run(self) -> None:
+            inside_boundaries = self.agent.check_cow_position()
+
+            if not inside_boundaries:
+                self.agent.guide_cow()
 
     # Dummy to replace healthchecker, mapgenerator, etc - just make the state change by itself
     class MutateBehaviour(PeriodicBehaviour):
@@ -434,3 +499,4 @@ class CowAgent(agent.Agent):
         boundary_template.set_metadata("ontology", "global_boundaries")
         boundary_template.set_metadata("performative", "inform")
         self.add_behaviour(self.ReceiveGlobalBoundariesBehaviour(), template=boundary_template)
+        self.add_behaviour(self.CowPositionLocalizerBehaviour(period=1.0))

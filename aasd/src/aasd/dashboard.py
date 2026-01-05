@@ -10,6 +10,7 @@ import streamlit as st
 MAP_UPDATE_INTERVAL_SECONDS = 0.5
 # How often to update the knowledge consistency table
 TABLE_UPDATE_INTERVAL_SECONDS = 0.2
+AVOID_RADIUS = 100
 
 
 def load_agent_states(state_dir: Path) -> Dict[str, Dict[str, Any]]:
@@ -99,6 +100,18 @@ def render_location_plot() -> None:
         return
 
     actual_states = get_actual_states(agent_states)
+
+    infected_areas = []
+    for cow_id, state in actual_states.items():
+        if state.get("health") == "unhealthy":
+            loc = state["location"]
+            infected_areas.append(
+                {
+                    "lon": loc["longitude"],
+                    "lat": loc["latitude"],
+                    "radius": AVOID_RADIUS,
+                }
+            )
 
     boundary_layer = None
 
@@ -193,6 +206,17 @@ def render_location_plot() -> None:
             line_width_min_pixels=1,
         )
 
+        infected_layer = pdk.Layer(
+            "ScatterplotLayer",
+            infected_areas,
+            get_position=["lon", "lat"],
+            get_radius="radius",
+            get_fill_color=[255, 0, 0, 80],
+            pickable=False,
+            stroked=False,
+            filled=True,
+        )
+
         text_layer = pdk.Layer(
             "TextLayer",
             df,
@@ -214,7 +238,7 @@ def render_location_plot() -> None:
         if boundary_layer:
             layers.append(boundary_layer)
 
-        layers.extend([line_layer, circle_layer, text_layer])
+        layers.extend([line_layer, circle_layer, infected_layer, text_layer])
 
         deck = pdk.Deck(
             layers=layers,
