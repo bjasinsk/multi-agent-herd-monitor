@@ -191,6 +191,50 @@ class CowAgent(agent.Agent):
         """Convert internal CowState objects to dict for JSON serialization"""
         return {cow_id: cow_state.to_json() for cow_id, cow_state in self.global_state.items()}
 
+    class ReceiveGlobalBoundariesBehaviour(CyclicBehaviour):
+        agent: CowAgent
+
+        async def run(self) -> None:
+            msg = await self.receive(timeout=1)
+            if not msg:
+                return
+
+            print(f"DEBUG: [{self.agent.cow_id}] RECEIVED GLOBAL BOUNDARIES MESSAGE", msg.body)
+
+            try:
+                data = json.loads(msg.body)
+            except json.JSONDecodeError:
+                return
+
+            boundaries_data = data.get("boundaries")
+            timestamp = data.get("timestamp")
+
+            if not boundaries_data:
+                return
+
+            new_boundaries = Boundaries(
+                lat_min=boundaries_data["lat_min"],
+                lat_max=boundaries_data["lat_max"],
+                lon_min=boundaries_data["lon_min"],
+                lon_max=boundaries_data["lon_max"],
+            )
+
+            own_state = self.agent.state
+
+            if timestamp > own_state.timestamp:
+                self.agent.boundaries = new_boundaries
+                print(f"DEBUG: [{self.agent.cow_id}] UPDATED boundaries:", new_boundaries)
+                self.agent.global_state[self.agent.cow_id] = CowState(
+                    location=own_state.location,
+                    health=own_state.health,
+                    boundaries=new_boundaries,
+                    timestamp=timestamp,
+                    peers=self.agent.known_agents.copy(),
+                )
+
+                print(f"{self.agent.cow_id} UPDATED GLOBAL BOUNDARIES FROM SHEPHERD")
+                self.agent.state_needs_broadcast_event.set()
+
     # Dummy to replace healthchecker, mapgenerator, etc - just make the state change by itself
     class MutateBehaviour(PeriodicBehaviour):
         agent: CowAgent
@@ -321,6 +365,7 @@ class CowAgent(agent.Agent):
                 print(f"{self.agent.cow_id:<7} Removed subscriber {subscriber}")
 
             for peer_jid in self.agent.known_agents:
+                print(f"DEBUG: [{self.agent.cow_id}] PROPAGATING STATE to peer:", peer_jid)
                 msg = Message(to=peer_jid, sender=self.agent.jid, metadata=msg_metadata, body=msg_body)
                 asyncio.create_task(self.send(msg))
 
@@ -348,6 +393,8 @@ class CowAgent(agent.Agent):
 
             if not msg:
                 return
+
+            print(f"[{self.agent.cow_id}] RECEIVED STATE FROM PEER:", msg.sender)
 
             subscriber_jid = msg.sender
 
@@ -382,3 +429,8 @@ class CowAgent(agent.Agent):
         subscription_template.set_metadata("ontology", "cow_state")
         subscription_template.set_metadata("performative", "subscribe")
         self.add_behaviour(self.HandleSubscriptionsBehaviour(), template=subscription_template)
+
+        boundary_template = Template()
+        boundary_template.set_metadata("ontology", "global_boundaries")
+        boundary_template.set_metadata("performative", "inform")
+        self.add_behaviour(self.ReceiveGlobalBoundariesBehaviour(), template=boundary_template)

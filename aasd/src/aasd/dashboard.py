@@ -100,6 +100,31 @@ def render_location_plot() -> None:
 
     actual_states = get_actual_states(agent_states)
 
+    boundary_layer = None
+
+    if actual_states:
+        any_cow = next(iter(actual_states.values()))
+        bounds = any_cow.get("boundaries")
+
+        if bounds:
+            boundary_polygon = [
+                [bounds["lon_min"], bounds["lat_min"]],
+                [bounds["lon_min"], bounds["lat_max"]],
+                [bounds["lon_max"], bounds["lat_max"]],
+                [bounds["lon_max"], bounds["lat_min"]],
+                [bounds["lon_min"], bounds["lat_min"]],
+            ]
+
+            boundary_layer = pdk.Layer(
+                "PolygonLayer",
+                data=[{"polygon": boundary_polygon}],
+                get_polygon="polygon",
+                get_fill_color=[255, 255, 255, 40],
+                get_line_color=[255, 255, 255, 200],
+                line_width_min_pixels=2,
+                pickable=False,
+            )
+
     locations_data = []
     for cow_id, state in actual_states.items():
         location = state.get("location", (0, 0))
@@ -185,8 +210,14 @@ def render_location_plot() -> None:
             pitch=0,
         )
 
+        layers = []
+        if boundary_layer:
+            layers.append(boundary_layer)
+
+        layers.extend([line_layer, circle_layer, text_layer])
+
         deck = pdk.Deck(
-            layers=[line_layer, circle_layer, text_layer],
+            layers=layers,
             initial_view_state=view_state,
         )
 
