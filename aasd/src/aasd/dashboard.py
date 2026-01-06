@@ -10,7 +10,7 @@ import streamlit as st
 MAP_UPDATE_INTERVAL_SECONDS = 0.5
 # How often to update the knowledge consistency table
 TABLE_UPDATE_INTERVAL_SECONDS = 0.2
-AVOID_RADIUS = 100
+AVOID_RADIUS = 300
 
 
 def load_agent_states(state_dir: Path) -> Dict[str, Dict[str, Any]]:
