@@ -6,6 +6,7 @@ import spade
 import spade.cli
 
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
+from aasd.shepherd import ShepherdAgent
 
 # How many cows to spawn
 NUM_AGENTS = 15
@@ -45,6 +46,7 @@ async def _main() -> None:
         "Starting cow herd tracking system...\nI nothing happens, ensure that an XMPP server is running on localhost."
     )
     print("\n $ uv run spade run\n")
+
     boundaries = Boundaries(
         lat_min=52.114894130999346,
         lat_max=52.135600964392594,
@@ -78,6 +80,9 @@ async def _main() -> None:
 
     for cow in cows.values():
         await cow.start()
+
+    shepherd = ShepherdAgent("shepherd@localhost", "password")
+    await shepherd.start()
 
     print(f"\nAll {NUM_AGENTS} cows started. They will update properties at random intervals.")
     print("Press Ctrl+C to stop...\n")

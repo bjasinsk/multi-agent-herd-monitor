@@ -10,6 +10,7 @@ import streamlit as st
 MAP_UPDATE_INTERVAL_SECONDS = 0.5
 # How often to update the knowledge consistency table
 TABLE_UPDATE_INTERVAL_SECONDS = 0.2
+AVOID_RADIUS = 300
 
 
 def load_agent_states(state_dir: Path) -> Dict[str, Dict[str, Any]]:
@@ -100,6 +101,43 @@ def render_location_plot() -> None:
 
     actual_states = get_actual_states(agent_states)
 
+    infected_areas = []
+    for cow_id, state in actual_states.items():
+        if state.get("health") == "unhealthy":
+            loc = state["location"]
+            infected_areas.append(
+                {
+                    "lon": loc["longitude"],
+                    "lat": loc["latitude"],
+                    "radius": AVOID_RADIUS,
+                }
+            )
+
+    boundary_layer = None
+
+    if actual_states:
+        any_cow = next(iter(actual_states.values()))
+        bounds = any_cow.get("boundaries")
+
+        if bounds:
+            boundary_polygon = [
+                [bounds["lon_min"], bounds["lat_min"]],
+                [bounds["lon_min"], bounds["lat_max"]],
+                [bounds["lon_max"], bounds["lat_max"]],
+                [bounds["lon_max"], bounds["lat_min"]],
+                [bounds["lon_min"], bounds["lat_min"]],
+            ]
+
+            boundary_layer = pdk.Layer(
+                "PolygonLayer",
+                data=[{"polygon": boundary_polygon}],
+                get_polygon="polygon",
+                get_fill_color=[255, 255, 255, 40],
+                get_line_color=[255, 255, 255, 200],
+                line_width_min_pixels=2,
+                pickable=False,
+            )
+
     locations_data = []
     for cow_id, state in actual_states.items():
         location = state.get("location", (0, 0))
@@ -168,6 +206,17 @@ def render_location_plot() -> None:
             line_width_min_pixels=1,
         )
 
+        infected_layer = pdk.Layer(
+            "ScatterplotLayer",
+            infected_areas,
+            get_position=["lon", "lat"],
+            get_radius="radius",
+            get_fill_color=[255, 0, 0, 80],
+            pickable=False,
+            stroked=False,
+            filled=True,
+        )
+
         text_layer = pdk.Layer(
             "TextLayer",
             df,
@@ -185,8 +234,14 @@ def render_location_plot() -> None:
             pitch=0,
         )
 
+        layers = []
+        if boundary_layer:
+            layers.append(boundary_layer)
+
+        layers.extend([line_layer, circle_layer, infected_layer, text_layer])
+
         deck = pdk.Deck(
-            layers=[line_layer, circle_layer, text_layer],
+            layers=layers,
             initial_view_state=view_state,
         )
 
