@@ -9,9 +9,9 @@ from aasd.agent import Boundaries
 
 
 class ShepherdAgent(Agent):
-    def __init__(self, jid, password, boundaries: Boundaries):
-            super().__init__(jid, password)
-            self.boundaries = boundaries
+    def __init__(self, jid: str, password: str, boundaries: Boundaries) -> None:
+        super().__init__(jid, password)
+        self.boundaries = boundaries
 
     @staticmethod
     def think_of_boundaries() -> Boundaries:
