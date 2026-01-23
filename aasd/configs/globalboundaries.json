@@ -1,6 +1,80 @@
 {
-  "lat_min": 52.115,
-  "lat_max": 52.135,
-  "lon_min": 20.455,
-  "lon_max": 20.495
+  "boundries": {
+    "lat_min": 52.115,
+    "lat_max": 52.135,
+    "lon_min": 20.455,
+    "lon_max": 20.495
+  },
+  "cows": [
+    {
+      "id": 1,
+      "start_position": {
+        "lat": 52.116,
+        "lon": 20.456
+      }
+    },
+    {
+      "id": 2,
+      "start_position": {
+        "lat": 52.118,
+        "lon": 20.460
+      }
+    },
+    {
+      "id": 3,
+      "start_position": {
+        "lat": 52.120,
+        "lon": 20.465
+      }
+    },
+    {
+      "id": 4,
+      "start_position": {
+        "lat": 52.122,
+        "lon": 20.470
+      }
+    },
+    {
+      "id": 5,
+      "start_position": {
+        "lat": 52.124,
+        "lon": 20.475
+      }
+    },
+    {
+      "id": 6,
+      "start_position": {
+        "lat": 52.126,
+        "lon": 20.480
+      }
+    },
+    {
+      "id": 7,
+      "start_position": {
+        "lat": 52.128,
+        "lon": 20.485
+      }
+    },
+    {
+      "id": 8,
+      "start_position": {
+        "lat": 52.130,
+        "lon": 20.490
+      }
+    },
+    {
+      "id": 9,
+      "start_position": {
+        "lat": 52.132,
+        "lon": 20.492
+      }
+    },
+    {
+      "id": 10,
+      "start_position": {
+        "lat": 52.134,
+        "lon": 20.494
+      }
+    }
+  ]
 }

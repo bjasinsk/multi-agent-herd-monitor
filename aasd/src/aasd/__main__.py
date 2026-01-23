@@ -40,15 +40,18 @@ def random_health() -> HealthStatus:
     """Generate a random health status"""
     return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
 
-def load_boundaries_from_file(path: str) -> Boundaries:
+def load_config_from_file(path: str):
     with open(path, "r") as f:
         data = json.load(f)
-    return Boundaries(
-        lat_min=data["lat_min"],
-        lat_max=data["lat_max"],
-        lon_min=data["lon_min"],
-        lon_max=data["lon_max"],
+    boundaries_data = data["boundries"]
+    boundaries = Boundaries(
+        lat_min=boundaries_data["lat_min"],
+        lat_max=boundaries_data["lat_max"],
+        lon_min=boundaries_data["lon_min"],
+        lon_max=boundaries_data["lon_max"],
     )
+    cows_config = data.get("cows", [])
+    return boundaries, cows_config
 
 async def _main() -> None:
     """
@@ -59,8 +62,7 @@ async def _main() -> None:
     )
     print("\n $ uv run spade run\n")
 
-    boundaries = load_boundaries_from_file("../configs/globalboundaries.json")
-
+    boundaries, cow_configs = load_config_from_file("../configs/globalboundaries.json")
 
     cows: dict[str, CowAgent] = {}
 
@@ -72,13 +74,15 @@ async def _main() -> None:
             if cow_location.distance_to(peer.location) <= PEER_DISTANCE_THRESHOLD_METERS and peer.cow_id != cow_id
         ]
 
-    for i in range(1, NUM_AGENTS + 1):
+    for cow_data in cow_configs:
+        cow_id = f"Cow-{cow_data['id']}"
+        start_pos = cow_data["start_position"]
         cow = CowAgent(
-            jid=f"cow{i}@localhost",
+            jid=f"cow{cow_data['id']}@localhost",
             password="password",
-            cow_id=f"Cow-{i}",
+            cow_id=cow_id,
             boundaries=boundaries,
-            initial_location=random_location(boundaries),
+            initial_location=Location(start_pos["lat"], start_pos["lon"]),
             initial_health=random_health(),
             mutation_probability=MUTATION_PROBABILITY,
             send_delay_seconds=SEND_DELAY_SECONDS,
