@@ -6,7 +6,7 @@ from shapely.ops import nearest_points
 from aasd.agent_commons import Boundaries, CowState, Location, MovementMap
 
 
-def is_inside_global_boundries(location: Location, boundaries: Boundaries) -> bool:
+def is_inside_global_boundaries(location: Location, boundaries: Boundaries) -> bool:
     return bool(boundaries.polygon.contains(Point(location.longitude, location.latitude)))
 
 
@@ -27,7 +27,7 @@ def check_cow_position(cow_state: CowState, movement_map: MovementMap) -> bool:
     actual_location = cow_state.location
     actual_boundaries = movement_map.boundaries
 
-    if not is_inside_global_boundries(actual_location, actual_boundaries):
+    if not is_inside_global_boundaries(actual_location, actual_boundaries):
         return False
 
     in_infected_radius = check_infected_radius(cow_state, actual_location, movement_map)

@@ -19,7 +19,7 @@ from aasd.agent_commons import Boundaries, CowState, HealthStatus, Location, Mov
 from aasd.map_commons import (
     check_cow_position,
     check_infected_radius,
-    is_inside_global_boundries,
+    is_inside_global_boundaries,
     move_towards_box,
     rotate_direction_vector,
 )
@@ -183,7 +183,7 @@ class CowAgent(agent.Agent):
             actual_boundaries = movement_map.boundaries
 
             # Check boundaries
-            if not is_inside_global_boundries(actual_location, actual_boundaries):
+            if not is_inside_global_boundaries(actual_location, actual_boundaries):
                 new_location = move_towards_box(actual_location, actual_boundaries, step)
 
                 self.agent.global_state[self.agent.cow_id] = CowState(
@@ -246,7 +246,7 @@ class CowAgent(agent.Agent):
                     location.longitude + new_dir_lon * step_degrees,
                 )
 
-                if is_inside_global_boundries(new_location, boundaries):
+                if is_inside_global_boundaries(new_location, boundaries):
                     return new_location
 
             return move_towards_box(location, boundaries, step=step_degrees)
