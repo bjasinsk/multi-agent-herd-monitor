@@ -44,11 +44,11 @@ def random_health() -> HealthStatus:
 def load_config_from_file(path: str) -> tuple[Boundaries, list]:
     with open(path, "r") as f:
         data = json.load(f)
-    boundaries_data = data["boundries"]
-    polygon_boundries = [(boundry["lon"], boundry["lat"]) for boundry in boundaries_data]
+    boundaries_data = data["boundaries"]
+    polygon_boundaries = [(boundry["lon"], boundry["lat"]) for boundry in boundaries_data]
 
     # shapely.Polygon store data as (lon, lat)
-    boundaries = Boundaries(Polygon(polygon_boundries))
+    boundaries = Boundaries(Polygon(polygon_boundaries))
     cows_config = data.get("cows", [])
     return boundaries, cows_config
 
