@@ -1,0 +1,110 @@
+{
+  "boundaries": [
+    {
+      "lat": 52.115,
+      "lon": 20.455
+    },
+    {
+      "lat": 52.125,
+      "lon": 20.445
+    },
+    {
+      "lat": 52.135,
+      "lon": 20.455
+    },
+    {
+      "lat": 52.135,
+      "lon": 20.495
+    },
+    {
+      "lat": 52.115,
+      "lon": 20.495
+    },
+    {
+      "lat": 52.120,
+      "lon": 20.475
+    }
+  ],
+  "cows": [
+    {
+      "id": 1,
+      "start_position": {
+        "lat": 52.116,
+        "lon": 20.456
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 2,
+      "start_position": {
+        "lat": 52.118,
+        "lon": 20.460
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 3,
+      "start_position": {
+        "lat": 52.120,
+        "lon": 20.465
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 4,
+      "start_position": {
+        "lat": 52.122,
+        "lon": 20.470
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 5,
+      "start_position": {
+        "lat": 52.124,
+        "lon": 20.475
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 6,
+      "start_position": {
+        "lat": 52.126,
+        "lon": 20.480
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 7,
+      "start_position": {
+        "lat": 52.128,
+        "lon": 20.485
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 8,
+      "start_position": {
+        "lat": 52.130,
+        "lon": 20.490
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 9,
+      "start_position": {
+        "lat": 52.132,
+        "lon": 20.492
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 10,
+      "start_position": {
+        "lat": 52.134,
+        "lon": 20.494
+      },
+      "health": "unhealthy"
+    }
+  ]
+}

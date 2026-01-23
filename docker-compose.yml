@@ -17,6 +17,7 @@ services:
 
 
   spade_hello:
+    build: .
     image: spade_hello:latest
     deploy:
       resources:

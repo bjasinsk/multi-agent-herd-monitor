@@ -13,6 +13,7 @@ dependencies = [
     "streamlit-extras>=0.7.8",
     "pandas>=2.0.0",
     "pydeck>=0.8.0",
+    "geopandas>=1.1.2",
 ]
 
 [project.scripts]
@@ -108,5 +109,5 @@ module = "spade.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "pydeck.*"
+module = ["shapely.*", "geopandas.*", "pydeck.*"]
 ignore_missing_imports = true

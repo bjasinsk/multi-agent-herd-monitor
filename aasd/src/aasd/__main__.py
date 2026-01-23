@@ -1,9 +1,12 @@
 import asyncio
+import json
 import math
 import random
 
+import geopandas
 import spade
 import spade.cli
+from shapely.geometry import Polygon
 
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
@@ -28,14 +31,26 @@ def calculate_distance(loc1: Location, loc2: Location) -> float:
 
 def random_location(boundaries: Boundaries) -> Location:
     """Generate a random location within boundaries"""
-    lat = random.uniform(boundaries.lat_min, boundaries.lat_max)
-    lon = random.uniform(boundaries.lon_min, boundaries.lon_max)
-    return Location(lat, lon)
+    geoSeries = geopandas.GeoSeries([boundaries.polygon])
+    location = geoSeries.sample_points(1)
+    return Location(location[0].x, location[0].y)
 
 
 def random_health() -> HealthStatus:
     """Generate a random health status"""
     return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
+
+
+def load_config_from_file(path: str) -> tuple[Boundaries, list]:
+    with open(path, "r") as f:
+        data = json.load(f)
+    boundaries_data = data["boundaries"]
+    polygon_boundaries = [(boundry["lon"], boundry["lat"]) for boundry in boundaries_data]
+
+    # shapely.Polygon store data as (lon, lat)
+    boundaries = Boundaries(Polygon(polygon_boundaries))
+    cows_config = data.get("cows", [])
+    return boundaries, cows_config
 
 
 async def _main() -> None:
@@ -47,12 +62,7 @@ async def _main() -> None:
     )
     print("\n $ uv run spade run\n")
 
-    boundaries = Boundaries(
-        lat_min=52.114894130999346,
-        lat_max=52.135600964392594,
-        lon_min=20.455205770503397,
-        lon_max=20.494292477391095,
-    )
+    boundaries, cow_configs = load_config_from_file("./src/aasd/configs/globalboundaries.json")
 
     cows: dict[str, CowAgent] = {}
 
@@ -64,14 +74,28 @@ async def _main() -> None:
             if cow_location.distance_to(peer.location) <= PEER_DISTANCE_THRESHOLD_METERS and peer.cow_id != cow_id
         ]
 
-    for i in range(1, NUM_AGENTS + 1):
+    for cow_data in cow_configs:
+        cow_id = f"Cow-{cow_data['id']}"
+        start_pos = cow_data["start_position"]
+
+        if start_pos and "lat" in start_pos and "lon" in start_pos:
+            initial_location = Location(start_pos["lat"], start_pos["lon"])
+        else:
+            initial_location = random_location(boundaries)
+
+        health_str = cow_data.get("health")
+        if health_str is not None:
+            initial_health = HealthStatus.HEALTHY if health_str == "healthy" else HealthStatus.UNHEALTHY
+        else:
+            initial_health = random_health()
+
         cow = CowAgent(
-            jid=f"cow{i}@localhost",
+            jid=f"cow{cow_data['id']}@localhost",
             password="password",
-            cow_id=f"Cow-{i}",
+            cow_id=cow_id,
             boundaries=boundaries,
-            initial_location=random_location(boundaries),
-            initial_health=random_health(),
+            initial_location=initial_location,
+            initial_health=initial_health,
             mutation_probability=MUTATION_PROBABILITY,
             send_delay_seconds=SEND_DELAY_SECONDS,
             get_peer_jids_in_range_fn=get_peer_jids_in_range,
@@ -81,7 +105,7 @@ async def _main() -> None:
     for cow in cows.values():
         await cow.start()
 
-    shepherd = ShepherdAgent("shepherd@localhost", "password")
+    shepherd = ShepherdAgent("shepherd@localhost", "password", boundaries)
     await shepherd.start()
 
     print(f"\nAll {NUM_AGENTS} cows started. They will update properties at random intervals.")
