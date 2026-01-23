@@ -77,13 +77,27 @@ async def _main() -> None:
     for cow_data in cow_configs:
         cow_id = f"Cow-{cow_data['id']}"
         start_pos = cow_data["start_position"]
+        pos = cow_data.get("start_position")
+
+        if pos and "lat" in pos and "lon" in pos:
+            pos = cow_data["start_position"]
+            initial_location = Location(pos["lat"], pos["lon"])
+        else:
+            initial_location = random_location(boundaries)
+
+        health_str = cow_data.get("health")
+        if health_str is not None:
+            initial_health = HealthStatus.HEALTHY if health_str == "healthy" else HealthStatus.UNHEALTHY
+        else:
+            initial_health = random_health()
+
         cow = CowAgent(
             jid=f"cow{cow_data['id']}@localhost",
             password="password",
             cow_id=cow_id,
             boundaries=boundaries,
-            initial_location=Location(start_pos["lat"], start_pos["lon"]),
-            initial_health=random_health(),
+            initial_location=initial_location,
+            initial_health=initial_health,
             mutation_probability=MUTATION_PROBABILITY,
             send_delay_seconds=SEND_DELAY_SECONDS,
             get_peer_jids_in_range_fn=get_peer_jids_in_range,
