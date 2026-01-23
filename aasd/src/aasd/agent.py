@@ -128,79 +128,6 @@ class CowAgent(agent.Agent):
             infected_areas=infected_areas,
         )
 
-    def avoid_infection(
-        self,
-        location: Location,
-        infected_location: Location,
-        boundaries: Boundaries,
-        *,
-        step_degrees: float = 0.0001,
-        rotation_step: float = 30.0,
-        max_retries: int = 12,
-    ) -> Location:
-        # vector from infected -> cow (in degrees)
-        vector_lat = location.latitude - infected_location.latitude
-        vector_lon = location.longitude - infected_location.longitude
-
-        length = math.sqrt(vector_lat * vector_lat + vector_lon * vector_lon)
-        if length == 0.0:
-            vector_lat, vector_lon = 1.0, 0.0
-            length = 1.0
-
-        direction_lat = vector_lat / length
-        direction_lon = vector_lon / length
-
-        for i in range(max_retries):
-            angle = i * rotation_step
-            new_dir_lat, new_dir_lon = rotate_direction_vector(direction_lat, direction_lon, angle)
-
-            new_location = Location(
-                location.latitude + new_dir_lat * step_degrees,
-                location.longitude + new_dir_lon * step_degrees,
-            )
-
-            if check_global_boundaries(new_location, boundaries):
-                return new_location
-
-        return move_towards_box(location, boundaries, step=step_degrees)
-
-    def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> None:
-        actual_location = self.state.location
-        actual_boundaries = movement_map.boundaries
-
-        # Check boundaries
-        if not check_global_boundaries(actual_location, actual_boundaries):
-            new_location = move_towards_box(actual_location, actual_boundaries, step)
-
-            self.global_state[self.cow_id] = CowState(
-                location=new_location,
-                health=self.state.health,
-                boundaries=actual_boundaries,
-                timestamp=time.time(),
-                peers=self.known_agents.copy(),
-            )
-            return
-
-        # Avoid infected radius (also applies to infected cows, but not from "itself")
-        in_infected_radius = check_infected_radius(self.state, actual_location, movement_map)
-        if in_infected_radius is not None:
-            infected_location, avoid_radius = in_infected_radius
-
-            new_location = self.avoid_infection(
-                actual_location,
-                infected_location,
-                actual_boundaries,
-            )
-
-            self.global_state[self.cow_id] = CowState(
-                location=new_location,
-                health=self.state.health,
-                boundaries=actual_boundaries,
-                timestamp=time.time(),
-                peers=self.known_agents.copy(),
-            )
-            return
-
     class ReceiveGlobalBoundariesBehaviour(CyclicBehaviour):
         agent: CowAgent
 
@@ -254,8 +181,81 @@ class CowAgent(agent.Agent):
             if not check_cow_position(self.agent.state, movement_map):
                 self.agent.guide_cow(movement_map)
 
+        def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> None:
+            actual_location = self.agent.state.location
+            actual_boundaries = movement_map.boundaries
+
+            # Check boundaries
+            if not check_global_boundaries(actual_location, actual_boundaries):
+                new_location = move_towards_box(actual_location, actual_boundaries, step)
+
+                self.agent.global_state[self.agent.cow_id] = CowState(
+                    location=new_location,
+                    health=self.agent.state.health,
+                    boundaries=actual_boundaries,
+                    timestamp=time.time(),
+                    peers=self.agent.known_agents.copy(),
+                )
+                return
+
+            # Avoid infected radius (also applies to infected cows, but not from "itself")
+            in_infected_radius = check_infected_radius(self.agent.state, actual_location, movement_map)
+            if in_infected_radius is not None:
+                infected_location, avoid_radius = in_infected_radius
+
+                new_location = self.avoid_infection(
+                    actual_location,
+                    infected_location,
+                    actual_boundaries,
+                )
+
+                self.agent.global_state[self.agent.cow_id] = CowState(
+                    location=new_location,
+                    health=self.agent.state.health,
+                    boundaries=actual_boundaries,
+                    timestamp=time.time(),
+                    peers=self.agent.known_agents.copy(),
+                )
+                return
+
+        def avoid_infection(
+            self,
+            location: Location,
+            infected_location: Location,
+            boundaries: Boundaries,
+            *,
+            step_degrees: float = 0.0001,
+            rotation_step: float = 30.0,
+            max_retries: int = 12,
+        ) -> Location:
+            # vector from infected -> cow (in degrees)
+            vector_lat = location.latitude - infected_location.latitude
+            vector_lon = location.longitude - infected_location.longitude
+
+            length = math.sqrt(vector_lat * vector_lat + vector_lon * vector_lon)
+            if length == 0.0:
+                vector_lat, vector_lon = 1.0, 0.0
+                length = 1.0
+
+            direction_lat = vector_lat / length
+            direction_lon = vector_lon / length
+
+            for i in range(max_retries):
+                angle = i * rotation_step
+                new_dir_lat, new_dir_lon = rotate_direction_vector(direction_lat, direction_lon, angle)
+
+                new_location = Location(
+                    location.latitude + new_dir_lat * step_degrees,
+                    location.longitude + new_dir_lon * step_degrees,
+                )
+
+                if check_global_boundaries(new_location, boundaries):
+                    return new_location
+
+            return move_towards_box(location, boundaries, step=step_degrees)
+
     # Dummy to replace healthchecker, mapgenerator, etc - just make the state change by itself
-    class MutateBehaviour(PeriodicBehaviour):
+    class CowHealthChecker(PeriodicBehaviour):
         agent: CowAgent
 
         async def run(self) -> None:
@@ -433,7 +433,7 @@ class CowAgent(agent.Agent):
         if self.dump_state:
             self.dump_state_to_file()
 
-        self.add_behaviour(self.MutateBehaviour(period=1.0))
+        self.add_behaviour(self.CowHealthChecker(period=1.0))
 
         self.add_behaviour(self.BroadcastStateBehaviour())
 

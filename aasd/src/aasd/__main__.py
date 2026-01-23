@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 import random
 
@@ -7,9 +8,6 @@ import spade.cli
 
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
-
-import json
-from pathlib import Path
 
 # How many cows to spawn
 NUM_AGENTS = 15
@@ -40,7 +38,8 @@ def random_health() -> HealthStatus:
     """Generate a random health status"""
     return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
 
-def load_config_from_file(path: str):
+
+def load_config_from_file(path: str) -> tuple[Boundaries, list]:
     with open(path, "r") as f:
         data = json.load(f)
     boundaries_data = data["boundries"]
@@ -52,6 +51,7 @@ def load_config_from_file(path: str):
     )
     cows_config = data.get("cows", [])
     return boundaries, cows_config
+
 
 async def _main() -> None:
     """
