@@ -9,6 +9,10 @@ from aasd.agent import Boundaries
 
 
 class ShepherdAgent(Agent):
+    def __init__(self, jid, password, boundaries: Boundaries):
+            super().__init__(jid, password)
+            self.boundaries = boundaries
+
     @staticmethod
     def think_of_boundaries() -> Boundaries:
         """
@@ -23,7 +27,8 @@ class ShepherdAgent(Agent):
 
     class SendLatestGlobalBoundaries(OneShotBehaviour):
         async def run(self) -> None:
-            boundaries = ShepherdAgent.think_of_boundaries()
+            # boundaries = ShepherdAgent.think_of_boundaries()
+            boundaries = self.agent.boundaries
 
             msg = Message(
                 to="cow1@localhost",

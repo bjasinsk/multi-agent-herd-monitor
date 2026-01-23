@@ -8,6 +8,9 @@ import spade.cli
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
 
+import json
+from pathlib import Path
+
 # How many cows to spawn
 NUM_AGENTS = 15
 # Set to 0 to arrange cows in a minimum spanning tree (information propagation stops by itself when it reaches leaves)
@@ -37,6 +40,15 @@ def random_health() -> HealthStatus:
     """Generate a random health status"""
     return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
 
+def load_boundaries_from_file(path: str) -> Boundaries:
+    with open(path, "r") as f:
+        data = json.load(f)
+    return Boundaries(
+        lat_min=data["lat_min"],
+        lat_max=data["lat_max"],
+        lon_min=data["lon_min"],
+        lon_max=data["lon_max"],
+    )
 
 async def _main() -> None:
     """
@@ -47,12 +59,8 @@ async def _main() -> None:
     )
     print("\n $ uv run spade run\n")
 
-    boundaries = Boundaries(
-        lat_min=52.114894130999346,
-        lat_max=52.135600964392594,
-        lon_min=20.455205770503397,
-        lon_max=20.494292477391095,
-    )
+    boundaries = load_boundaries_from_file("../configs/globalboundaries.json")
+
 
     cows: dict[str, CowAgent] = {}
 
@@ -81,7 +89,7 @@ async def _main() -> None:
     for cow in cows.values():
         await cow.start()
 
-    shepherd = ShepherdAgent("shepherd@localhost", "password")
+    shepherd = ShepherdAgent("shepherd@localhost", "password", boundaries)
     await shepherd.start()
 
     print(f"\nAll {NUM_AGENTS} cows started. They will update properties at random intervals.")
