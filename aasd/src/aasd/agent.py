@@ -179,7 +179,7 @@ class CowAgent(agent.Agent):
             movement_map = self.agent.generate_map()
 
             if not check_cow_position(self.agent.state, movement_map):
-                self.agent.guide_cow(movement_map)
+                self.guide_cow(movement_map)
 
         def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> None:
             actual_location = self.agent.state.location
