@@ -9,6 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
+from shapely.geometry import Polygon
 from spade import agent
 from spade.behaviour import CyclicBehaviour, PeriodicBehaviour
 from spade.message import Message
@@ -17,8 +18,8 @@ from spade.template import Template
 from aasd.agent_commons import Boundaries, CowState, HealthStatus, Location, MovementMap
 from aasd.map_commons import (
     check_cow_position,
-    check_global_boundaries,
     check_infected_radius,
+    is_inside_global_boundries,
     move_towards_box,
     rotate_direction_vector,
 )
@@ -144,17 +145,13 @@ class CowAgent(agent.Agent):
                 return
 
             boundaries_data = data.get("boundaries")
+            shapely_coords = [(lon, lat) for lat, lon in boundaries_data]
             timestamp = data.get("timestamp")
 
             if not boundaries_data:
                 return
 
-            new_boundaries = Boundaries(
-                lat_min=boundaries_data["lat_min"],
-                lat_max=boundaries_data["lat_max"],
-                lon_min=boundaries_data["lon_min"],
-                lon_max=boundaries_data["lon_max"],
-            )
+            new_boundaries = Boundaries(Polygon(shapely_coords))
 
             own_state = self.agent.state
 
@@ -186,7 +183,7 @@ class CowAgent(agent.Agent):
             actual_boundaries = movement_map.boundaries
 
             # Check boundaries
-            if not check_global_boundaries(actual_location, actual_boundaries):
+            if not is_inside_global_boundries(actual_location, actual_boundaries):
                 new_location = move_towards_box(actual_location, actual_boundaries, step)
 
                 self.agent.global_state[self.agent.cow_id] = CowState(
@@ -249,7 +246,7 @@ class CowAgent(agent.Agent):
                     location.longitude + new_dir_lon * step_degrees,
                 )
 
-                if check_global_boundaries(new_location, boundaries):
+                if is_inside_global_boundries(new_location, boundaries):
                     return new_location
 
             return move_towards_box(location, boundaries, step=step_degrees)
@@ -278,8 +275,9 @@ class CowAgent(agent.Agent):
             own_state = self.agent.state
 
             if property_choice == "location":
-                lat_max_delta = (self.agent.boundaries.lat_max - self.agent.boundaries.lat_min) * 0.1
-                lon_max_delta = (self.agent.boundaries.lon_max - self.agent.boundaries.lon_min) * 0.1
+                min_lon, min_lat, max_lon, max_lat = self.agent.boundaries.polygon.bounds
+                lat_max_delta = (max_lat - min_lat) * 0.1
+                lon_max_delta = (max_lon - min_lon) * 0.1
                 lat = random.uniform(
                     own_state.location.latitude - lat_max_delta, own_state.location.latitude + lat_max_delta
                 )

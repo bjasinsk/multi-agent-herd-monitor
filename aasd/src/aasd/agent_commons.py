@@ -2,21 +2,14 @@ import math
 from enum import Enum
 from typing import Any, NamedTuple, Self
 
+from shapely.geometry import Polygon
+
 
 class HealthStatus(Enum):
     """Health status of a cow"""
 
     HEALTHY = "healthy"
     UNHEALTHY = "unhealthy"
-
-
-class Boundaries(NamedTuple):
-    """Geographic boundaries for cow movement"""
-
-    lat_min: float
-    lat_max: float
-    lon_min: float
-    lon_max: float
 
 
 class Location(NamedTuple):
@@ -40,6 +33,13 @@ class Location(NamedTuple):
         return dist
 
 
+class Boundaries:
+    """Geographic boundaries for cow movement"""
+
+    def __init__(self, polygon: Polygon):
+        self.polygon = polygon
+
+
 class MovementMap(NamedTuple):
     boundaries: Boundaries
     infected_areas: list[tuple[Location, float]]
@@ -56,18 +56,14 @@ class CowState(NamedTuple):
 
     def to_json(self) -> dict[str, Any]:
         """Convert a CowState object to dict for JSON serialization"""
+        lat_lon_list = [[y, x] for x, y in self.boundaries.polygon.exterior.coords]
         return {
             "location": {
                 "latitude": self.location.latitude,
                 "longitude": self.location.longitude,
             },
             "health": self.health.value,
-            "boundaries": {
-                "lat_min": self.boundaries.lat_min,
-                "lat_max": self.boundaries.lat_max,
-                "lon_min": self.boundaries.lon_min,
-                "lon_max": self.boundaries.lon_max,
-            },
+            "boundaries": lat_lon_list,
             "timestamp": self.timestamp,
             "peers": self.peers,
         }
@@ -77,15 +73,11 @@ class CowState(NamedTuple):
         """Convert a dict to CowState object"""
         location_data = cow_data["location"]
         boundaries_data = cow_data["boundaries"]
+        shapely_coords = [(lon, lat) for lat, lon in boundaries_data]
         return cls(
             location=Location(location_data["latitude"], location_data["longitude"]),
             health=HealthStatus(cow_data["health"]),
-            boundaries=Boundaries(
-                boundaries_data["lat_min"],
-                boundaries_data["lat_max"],
-                boundaries_data["lon_min"],
-                boundaries_data["lon_max"],
-            ),
+            boundaries=Boundaries(Polygon(shapely_coords)),
             timestamp=cow_data["timestamp"],
             peers=cow_data.get("peers", []),
         )

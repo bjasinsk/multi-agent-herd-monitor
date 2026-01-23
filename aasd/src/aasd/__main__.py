@@ -3,8 +3,10 @@ import json
 import math
 import random
 
+import geopandas
 import spade
 import spade.cli
+from shapely.geometry import Polygon
 
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
@@ -29,9 +31,9 @@ def calculate_distance(loc1: Location, loc2: Location) -> float:
 
 def random_location(boundaries: Boundaries) -> Location:
     """Generate a random location within boundaries"""
-    lat = random.uniform(boundaries.lat_min, boundaries.lat_max)
-    lon = random.uniform(boundaries.lon_min, boundaries.lon_max)
-    return Location(lat, lon)
+    geoSeries = geopandas.GeoSeries([boundaries.polygon])
+    location = geoSeries.sample_points(1)
+    return Location(location[0].x, location[0].y)
 
 
 def random_health() -> HealthStatus:
@@ -43,12 +45,10 @@ def load_config_from_file(path: str) -> tuple[Boundaries, list]:
     with open(path, "r") as f:
         data = json.load(f)
     boundaries_data = data["boundries"]
-    boundaries = Boundaries(
-        lat_min=boundaries_data["lat_min"],
-        lat_max=boundaries_data["lat_max"],
-        lon_min=boundaries_data["lon_min"],
-        lon_max=boundaries_data["lon_max"],
-    )
+    polygon_boundries = [(boundry["lon"], boundry["lat"]) for boundry in boundaries_data]
+
+    # shapely.Polygon store data as (lon, lat)
+    boundaries = Boundaries(Polygon(polygon_boundries))
     cows_config = data.get("cows", [])
     return boundaries, cows_config
 
@@ -62,7 +62,7 @@ async def _main() -> None:
     )
     print("\n $ uv run spade run\n")
 
-    boundaries, cow_configs = load_config_from_file("../configs/globalboundaries.json")
+    boundaries, cow_configs = load_config_from_file("./src/aasd/configs/globalboundaries.json")
 
     cows: dict[str, CowAgent] = {}
 
@@ -77,11 +77,9 @@ async def _main() -> None:
     for cow_data in cow_configs:
         cow_id = f"Cow-{cow_data['id']}"
         start_pos = cow_data["start_position"]
-        pos = cow_data.get("start_position")
 
-        if pos and "lat" in pos and "lon" in pos:
-            pos = cow_data["start_position"]
-            initial_location = Location(pos["lat"], pos["lon"])
+        if start_pos and "lat" in start_pos and "lon" in start_pos:
+            initial_location = Location(start_pos["lat"], start_pos["lon"])
         else:
             initial_location = random_location(boundaries)
 

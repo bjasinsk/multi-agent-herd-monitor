@@ -1,13 +1,13 @@
 import math
 
+from shapely.geometry import Point
+from shapely.ops import nearest_points
+
 from aasd.agent_commons import Boundaries, CowState, Location, MovementMap
 
 
-def check_global_boundaries(location: Location, boundaries: Boundaries) -> bool:
-    return (
-        boundaries.lat_min <= location.latitude <= boundaries.lat_max
-        and boundaries.lon_min <= location.longitude <= boundaries.lon_max
-    )
+def is_inside_global_boundries(location: Location, boundaries: Boundaries) -> bool:
+    return bool(boundaries.polygon.contains(Point(location.longitude, location.latitude)))
 
 
 def check_infected_radius(
@@ -27,7 +27,7 @@ def check_cow_position(cow_state: CowState, movement_map: MovementMap) -> bool:
     actual_location = cow_state.location
     actual_boundaries = movement_map.boundaries
 
-    if not check_global_boundaries(actual_location, actual_boundaries):
+    if not is_inside_global_boundries(actual_location, actual_boundaries):
         return False
 
     in_infected_radius = check_infected_radius(cow_state, actual_location, movement_map)
@@ -39,8 +39,9 @@ def check_cow_position(cow_state: CowState, movement_map: MovementMap) -> bool:
 
 def move_towards_box(location: Location, boundaries: Boundaries, step: float) -> Location:
     # destination = nearest point in box
-    destination_lat = min(max(location.latitude, boundaries.lat_min), boundaries.lat_max)
-    destination_lon = min(max(location.longitude, boundaries.lon_min), boundaries.lon_max)
+    nearest_point, origin_point = nearest_points(boundaries.polygon, Point(location.longitude, location.latitude))
+    destination_lon = nearest_point.x
+    destination_lat = nearest_point.y
 
     delta_lat = destination_lat - location.latitude
     delta_lon = destination_lon - location.longitude

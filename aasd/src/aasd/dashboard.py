@@ -120,17 +120,11 @@ def render_location_plot() -> None:
         bounds = any_cow.get("boundaries")
 
         if bounds:
-            boundary_polygon = [
-                [bounds["lon_min"], bounds["lat_min"]],
-                [bounds["lon_min"], bounds["lat_max"]],
-                [bounds["lon_max"], bounds["lat_max"]],
-                [bounds["lon_max"], bounds["lat_min"]],
-                [bounds["lon_min"], bounds["lat_min"]],
-            ]
+            shapely_coords = [[lon, lat] for lat, lon in bounds]
 
             boundary_layer = pdk.Layer(
                 "PolygonLayer",
-                data=[{"polygon": boundary_polygon}],
+                data=[{"polygon": shapely_coords}],
                 get_polygon="polygon",
                 get_fill_color=[255, 255, 255, 40],
                 get_line_color=[255, 255, 255, 200],
