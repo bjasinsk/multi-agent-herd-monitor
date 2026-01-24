@@ -10,12 +10,12 @@ import spade
 import spade.cli
 from shapely.geometry import Point, Polygon
 
-from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
-from aasd.shepherd import ShepherdAgent
+from aasd.cow_agent import Boundaries, CowAgent, HealthStatus, Location
+from aasd.shepherd_agent import ShepherdAgent
 
 
 def calculate_distance(loc1: Location, loc2: Location) -> float:
-    # FIXME this is wrong and does not work with geography, use Location.distance_to instead
+    # FIXME use Location.distance_to instead
     """Calculate Euclidean distance between two locations"""
     return math.sqrt((loc1.latitude - loc2.latitude) ** 2 + (loc1.longitude - loc2.longitude) ** 2)
 
@@ -53,6 +53,7 @@ async def _main() -> None:
     parser.add_argument(
         "--scenario", type=str, default="./scenarios/oneline.json", help="Path to the configuration file"
     )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging", default=False)
     args = parser.parse_args()
 
     print(
@@ -80,6 +81,8 @@ async def _main() -> None:
     GUIDE_COW_INTERVAL_SECONDS = params.get("guide_cow_interval_seconds", 1.0)
     # Interval for subscribing to peer updates
     SUBSCRIBE_TO_PEERS_INTERVAL_SECONDS = params.get("subscribe_to_peers_interval_seconds", 10.0)
+    # Infectious radius in meters
+    INFECTIOUS_RADIUS_METERS = params.get("infectious_radius_meters", 300.0)
 
     cows: dict[str, CowAgent] = {}
 
@@ -127,13 +130,15 @@ async def _main() -> None:
             get_peer_jids_in_range_fn=get_peer_jids_in_range,
             guide_cow_interval_seconds=GUIDE_COW_INTERVAL_SECONDS,
             subscribe_to_peers_interval_seconds=SUBSCRIBE_TO_PEERS_INTERVAL_SECONDS,
+            infectious_radius_meters=INFECTIOUS_RADIUS_METERS,
+            verbose_logging=args.verbose,
         )
         cows[cow.cow_id] = cow
 
     for cow in cows.values():
         await cow.start()
 
-    shepherd = ShepherdAgent("shepherd@localhost", "password", boundaries)
+    shepherd = ShepherdAgent("shepherd@localhost", "password", boundaries, verbose_logging=args.verbose)
     await shepherd.start()
 
     print("Press Ctrl+C to stop...\n")

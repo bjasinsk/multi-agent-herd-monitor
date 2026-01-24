@@ -44,7 +44,9 @@ class CowAgent(agent.Agent):
         send_delay_seconds: float = 0.5,
         guide_cow_interval_seconds: float = 1.0,
         subscribe_to_peers_interval_seconds: float = 10.0,
+        infectious_radius_meters: float = 300.0,
         dump_state: bool = True,
+        verbose_logging: bool = False,
     ) -> None:
         super().__init__(jid, password)
         self.cow_id: str = cow_id
@@ -60,6 +62,8 @@ class CowAgent(agent.Agent):
 
         self.guide_cow_interval_seconds = guide_cow_interval_seconds
         self.subscribe_to_peers_interval_seconds = subscribe_to_peers_interval_seconds
+
+        self.infectious_radius_meters = infectious_radius_meters
 
         self.global_state: dict[str, CowState] = {
             self.cow_id: CowState(
@@ -80,7 +84,11 @@ class CowAgent(agent.Agent):
 
         self.state_needs_broadcast_event = asyncio.Event()
 
-        self._guidance_active = False
+        # start, end
+        # none if no guidance active
+        self._guidance_delta: Location | None = None
+
+        self.verbose_logging = verbose_logging
 
     @property
     def state(self) -> CowState:
@@ -98,7 +106,15 @@ class CowAgent(agent.Agent):
         with open(state_file, "w") as f:
             state_with_internal = self.global_state_dict | {
                 "internal": {
-                    "guidance_active": self._guidance_active,
+                    "infectious_radius_meters": self.infectious_radius_meters,
+                }
+                | {
+                    "guidance_delta": {
+                        "latitude": self._guidance_delta.latitude,
+                        "longitude": self._guidance_delta.longitude,
+                    }
+                    if self._guidance_delta is not None
+                    else None
                 }
             }
             json.dump(state_with_internal, f, indent=2)
@@ -143,7 +159,7 @@ class CowAgent(agent.Agent):
 
         for cow_id, cow in self.global_state.items():
             if cow.health == HealthStatus.UNHEALTHY:
-                infected_areas.append((cow.location, 300.0))
+                infected_areas.append((cow.location, self.infectious_radius_meters))
 
         return MovementMap(
             boundaries=self.state.boundaries,
@@ -158,7 +174,8 @@ class CowAgent(agent.Agent):
             if not msg:
                 return
 
-            # print(f"DEBUG: [{self.agent.cow_id}] RECEIVED GLOBAL BOUNDARIES MESSAGE", msg.body)
+            if self.agent.verbose_logging:
+                print(f"DEBUG: [{self.agent.cow_id}] RECEIVED GLOBAL BOUNDARIES MESSAGE", msg.body)
 
             try:
                 data = json.loads(msg.body)
@@ -178,7 +195,8 @@ class CowAgent(agent.Agent):
 
             if timestamp > own_state.timestamp:
                 self.agent.boundaries = new_boundaries
-                # print(f"DEBUG: [{self.agent.cow_id}] UPDATED boundaries:", new_boundaries)
+                if self.agent.verbose_logging:
+                    print(f"DEBUG: [{self.agent.cow_id}] UPDATED boundaries:", new_boundaries)
                 self.agent.global_state[self.agent.cow_id] = CowState(
                     location=own_state.location,
                     health=own_state.health,
@@ -187,7 +205,8 @@ class CowAgent(agent.Agent):
                     peers=self.agent.known_agents.copy(),
                 )
 
-                print(f"{self.agent.cow_id} UPDATED GLOBAL BOUNDARIES FROM SHEPHERD")
+                if self.agent.verbose_logging:
+                    print(f"{self.agent.cow_id} UPDATED GLOBAL BOUNDARIES FROM SHEPHERD")
                 self.agent.state_needs_broadcast_event.set()
 
     class CowPositionLocalizerBehaviour(PeriodicBehaviour):
@@ -197,18 +216,20 @@ class CowAgent(agent.Agent):
             movement_map = self.agent.generate_map()
 
             if not check_cow_position(self.agent.state, movement_map):
-                self.agent._guidance_active = True
-                self.guide_cow(movement_map)
+                delta = self.guide_cow(movement_map)
+                self.agent._guidance_delta = delta
+                self.agent.state_needs_broadcast_event.set()
             else:
-                self.agent._guidance_active = False
+                self.agent._guidance_delta = None
 
-        def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> None:
+        def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> Location | None:
             actual_location = self.agent.state.location
             actual_boundaries = movement_map.boundaries
 
             # Check boundaries
             if not is_inside_global_boundaries(actual_location, actual_boundaries):
-                print(f"{self.agent.cow_id:<7} Moving back inside boundaries")
+                if self.agent.verbose_logging:
+                    print(f"{self.agent.cow_id:<7} Moving back inside boundaries")
                 new_location = move_towards_box(actual_location, actual_boundaries, step)
 
                 self.agent.global_state[self.agent.cow_id] = CowState(
@@ -218,21 +239,33 @@ class CowAgent(agent.Agent):
                     timestamp=time.time(),
                     peers=self.agent.known_agents.copy(),
                 )
-                return
+
+                guidance_delta = Location(
+                    new_location.latitude - actual_location.latitude,
+                    new_location.longitude - actual_location.longitude,
+                )
+
+                return guidance_delta
 
             # Avoid infected radius (also applies to infected cows, but not from "itself")
             in_infected_radius = check_infected_radius(self.agent.state, actual_location, movement_map)
             if in_infected_radius is not None:
                 infected_location, avoid_radius = in_infected_radius
 
-                print(
-                    f"{self.agent.cow_id:<7} Avoiding infection at ({infected_location.latitude:.5f}, {infected_location.longitude:.5f})"
-                )
+                if self.agent.verbose_logging:
+                    print(
+                        f"{self.agent.cow_id:<7} Avoiding infection at ({infected_location.latitude:.5f}, {infected_location.longitude:.5f})"
+                    )
 
                 new_location = self.avoid_infection(
                     actual_location,
                     infected_location,
                     actual_boundaries,
+                )
+
+                self.agent._guidance_delta = Location(
+                    new_location.latitude - actual_location.latitude,
+                    new_location.longitude - actual_location.longitude,
                 )
 
                 self.agent.global_state[self.agent.cow_id] = CowState(
@@ -242,7 +275,14 @@ class CowAgent(agent.Agent):
                     timestamp=time.time(),
                     peers=self.agent.known_agents.copy(),
                 )
-                return
+
+                guidance_delta = Location(
+                    new_location.latitude - actual_location.latitude,
+                    new_location.longitude - actual_location.longitude,
+                )
+
+                return guidance_delta
+            return None
 
         def avoid_infection(
             self,
@@ -295,10 +335,12 @@ class CowAgent(agent.Agent):
             if not (mutated_health or mutated_location):
                 return
 
-            # own_state = self.agent.global_state[self.agent.cow_id]
-            # print(
-            # f"{self.agent.cow_id:<7} UPDATED ({own_state.location.latitude:.5f}, {own_state.location.longitude:.5f}) {own_state.health.value}"
-            # )
+            own_state = self.agent.global_state[self.agent.cow_id]
+
+            if self.agent.verbose_logging:
+                print(
+                    f"{self.agent.cow_id:<7} UPDATED ({own_state.location.latitude:.5f}, {own_state.location.longitude:.5f}) {own_state.health.value}"
+                )
 
             self.agent.state_needs_broadcast_event.set()
 
@@ -352,15 +394,17 @@ class CowAgent(agent.Agent):
                 print(f"Cow {self.agent.cow_id:<7} Received malformed message")
 
             received_state = data["state"]
-            # sender_id = data["sender"]
+            sender_id = data["sender"]
 
             state_changed = self.consolidate_state(received_state)
 
             if not state_changed:
-                # print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
+                if self.agent.verbose_logging:
+                    print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
                 return
 
-            # print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}")
+            if self.agent.verbose_logging:
+                print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}")
 
             self.agent.state_needs_broadcast_event.set()
 
@@ -393,9 +437,10 @@ class CowAgent(agent.Agent):
         async def run(self) -> None:
             await self.agent.state_needs_broadcast_event.wait()
 
-            # print(
-            #     f"{self.agent.cow_id:<7} Propagate state change to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
-            # )
+            if self.agent.verbose_logging:
+                print(
+                    f"{self.agent.cow_id:<7} Propagate state change to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
+                )
 
             if self.agent.dump_state:
                 self.agent.dump_state_to_file()
@@ -416,10 +461,12 @@ class CowAgent(agent.Agent):
             # MOCK: remove subscribers that are out of range
             for subscriber in set(self.agent.known_agents) - set(self.agent.get_peer_jids_in_range()):
                 self.agent.remove_peer(subscriber)
-                print(f"{self.agent.cow_id:<7} Removed subscriber {subscriber}")
+                if self.agent.verbose_logging:
+                    print(f"{self.agent.cow_id:<7} Removed subscriber {subscriber}")
 
             for peer_jid in self.agent.known_agents:
-                # print(f"DEBUG: [{self.agent.cow_id}] PROPAGATING STATE to peer:", peer_jid)
+                if self.agent.verbose_logging:
+                    print(f"DEBUG: [{self.agent.cow_id}] PROPAGATING STATE to peer:", peer_jid)
                 msg = Message(to=peer_jid, sender=self.agent.jid, metadata=msg_metadata, body=msg_body)
                 asyncio.create_task(self.send(msg))
 
@@ -448,14 +495,16 @@ class CowAgent(agent.Agent):
             if not msg:
                 return
 
-            # print(f"[{self.agent.cow_id}] RECEIVED STATE FROM PEER:", msg.sender)
+            if self.agent.verbose_logging:
+                print(f"[{self.agent.cow_id}] RECEIVED STATE FROM PEER:", msg.sender)
 
             subscriber_jid = msg.sender
 
             if not self.agent.add_peer(str(subscriber_jid)):
                 return
 
-            print(f"{self.agent.cow_id:<7} Added subscriber {str(subscriber_jid)}")
+            if self.agent.verbose_logging:
+                print(f"{self.agent.cow_id:<7} Added subscriber {str(subscriber_jid)}")
 
     async def setup(self) -> None:
         own_state = self.state

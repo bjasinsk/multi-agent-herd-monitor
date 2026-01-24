@@ -28,10 +28,16 @@ Start the spade Server in the background (kindly ignore the errors):
 uv run spade run
 ```
 
+Run the Streamlit live dashboard:
+
+```shell
+uv run streamlit run src/aasd/dashboard.py
+```
+
 Run:
 
 ```shell
-uv run aasd
+uv run aasd [--scenario <PATH_TO_SCENARIO>]
 ```
 
 Run with debugger:
@@ -44,10 +50,4 @@ Run with autoreload:
 
 ```shell
 uv run watchmedo auto-restart --pattern "*.py" --recursive  aasd
-```
-
-Run the Streamlit live dashboard:
-
-```shell
-uv run streamlit run src/aasd/dashboard.py
 ```

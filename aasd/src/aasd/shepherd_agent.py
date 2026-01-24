@@ -5,17 +5,17 @@ from spade.agent import Agent
 from spade.behaviour import OneShotBehaviour
 from spade.message import Message
 
-from aasd.agent import Boundaries
+from aasd.agent_commons import Boundaries
 
 
 class ShepherdAgent(Agent):
-    def __init__(self, jid: str, password: str, boundaries: Boundaries) -> None:
+    def __init__(self, jid: str, password: str, boundaries: Boundaries, verbose_logging: bool = False) -> None:
         super().__init__(jid, password)
         self.boundaries = boundaries
+        self.verbose_logging = verbose_logging
 
     class SendLatestGlobalBoundaries(OneShotBehaviour):
         async def run(self) -> None:
-            boundaries = self.agent.boundaries
             lat_lon_list = [[y, x] for x, y in self.agent.boundaries.polygon.exterior.coords]
 
             msg = Message(
@@ -36,7 +36,8 @@ class ShepherdAgent(Agent):
 
             await self.send(msg)
             print("SHEPHERD: SendLatestGlobalBoundaries")
-            print("DEBUG: SHEPHERD: sending global boundaries ->", boundaries)
+            if self.agent.verbose_logging:
+                print("DEBUG: SHEPHERD: sending global boundaries ->", repr(lat_lon_list))
 
     async def setup(self) -> None:
         print("SHEPHERD: started")

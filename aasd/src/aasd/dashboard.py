@@ -10,7 +10,6 @@ import streamlit as st
 MAP_UPDATE_INTERVAL_SECONDS = 0.5
 # How often to update the knowledge consistency table
 TABLE_UPDATE_INTERVAL_SECONDS = 0.2
-AVOID_RADIUS = 300
 
 
 def load_agent_states(state_dir: Path) -> Dict[str, Dict[str, Any]]:
@@ -106,17 +105,18 @@ def render_location_plot() -> None:
     for cow_id, state in actual_states.items():
         if state.get("health") == "unhealthy":
             loc = state["location"]
+            infectious_radius_meters = state["internal"]["infectious_radius_meters"]
             infected_areas.append(
                 {
                     "lon": loc["longitude"],
                     "lat": loc["latitude"],
-                    "radius": AVOID_RADIUS,
+                    "radius": infectious_radius_meters,
                 }
             )
 
     active_guidance_markers = []
     for cow_id, state in actual_states.items():
-        if state["internal"]["guidance_active"]:
+        if state["internal"]["guidance_delta"] is not None:
             loc = state["location"]
             active_guidance_markers.append(
                 {
@@ -189,7 +189,23 @@ def render_location_plot() -> None:
                         }
                     )
 
-        line_layer = pdk.Layer(
+        guidance_vectors = []
+        for cow_id, state in actual_states.items():
+            if state["internal"]["guidance_delta"] is not None:
+                loc = state["location"]
+                delta = state["internal"]["guidance_delta"]
+                start_lon = loc["longitude"]
+                start_lat = loc["latitude"]
+                end_lon = start_lon + delta["longitude"] * 20
+                end_lat = start_lat + delta["latitude"] * 20
+                guidance_vectors.append(
+                    {
+                        "start": [start_lon, start_lat],
+                        "end": [end_lon, end_lat],
+                    }
+                )
+
+        cow_connection_layer = pdk.Layer(
             "LineLayer",
             peer_lines,
             get_source_position="start",
@@ -199,7 +215,7 @@ def render_location_plot() -> None:
             pickable=False,
         )
 
-        circle_layer = pdk.Layer(
+        cow_marker_layer = pdk.Layer(
             "ScatterplotLayer",
             df,
             get_position=["lon", "lat"],
@@ -223,7 +239,7 @@ def render_location_plot() -> None:
             filled=True,
         )
 
-        guidance_layer = pdk.Layer(
+        guidance_status_layer = pdk.Layer(
             "ScatterplotLayer",
             active_guidance_markers,
             get_position=["lon", "lat"],
@@ -235,7 +251,17 @@ def render_location_plot() -> None:
             filled=False,
         )
 
-        text_layer = pdk.Layer(
+        guidance_vector_layer = pdk.Layer(
+            "LineLayer",
+            guidance_vectors,
+            get_source_position="start",
+            get_target_position="end",
+            get_color=[0, 0, 255, 80],
+            get_width=4,
+            pickable=False,
+        )
+
+        cow_number_layer = pdk.Layer(
             "TextLayer",
             df,
             get_position=["lon", "lat"],
@@ -256,7 +282,16 @@ def render_location_plot() -> None:
         if boundary_layer:
             layers.append(boundary_layer)
 
-        layers.extend([line_layer, circle_layer, infected_layer, text_layer, guidance_layer])
+        layers.extend(
+            [
+                cow_connection_layer,
+                cow_marker_layer,
+                infected_layer,
+                cow_number_layer,
+                guidance_status_layer,
+                guidance_vector_layer,
+            ]
+        )
 
         deck = pdk.Deck(
             layers=layers,

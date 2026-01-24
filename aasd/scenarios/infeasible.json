@@ -32,7 +32,7 @@
         "lat": 52.1224,
         "lon": 20.4711
       },
-      "health": "healthy"
+      "health": "unhealthy"
     },
     {
       "id": 3,
@@ -40,7 +40,7 @@
         "lat": 52.1223,
         "lon": 20.4727
       },
-      "health": "healthy"
+      "health": "unhealthy"
     },
     {
       "id": 4,
@@ -48,7 +48,7 @@
         "lat": 52.1209,
         "lon": 20.4728
       },
-      "health": "healthy"
+      "health": "unhealthy"
     },
     {
       "id": 5,
@@ -56,10 +56,12 @@
         "lat": 52.1220,
         "lon": 20.4731
       },
-      "health": "healthy"
+      "health": "unhealthy"
     }
   ],
   "params": {
-    "health_mutation_probability": 0.0
+    "health_mutation_probability": 0.0,
+    "infectious_radius_meters": 2000.0,
+    "loc_mutation_probability": 0.5
   }
 }
