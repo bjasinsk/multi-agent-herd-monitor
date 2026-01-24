@@ -17,7 +17,7 @@ WORKDIR /app
 COPY . /app
 
 # Make scripts executable
-# RUN chmod +x main.py examples.py monitor_states.py 
+# RUN chmod +x main.py examples.py monitor_states.py
 
 # Set default command
 CMD ["python", "-u", "main.py"]

@@ -6,7 +6,7 @@ import random
 import geopandas
 import spade
 import spade.cli
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
@@ -25,6 +25,7 @@ PEER_DISTANCE_THRESHOLD_METERS = 1000.0
 
 
 def calculate_distance(loc1: Location, loc2: Location) -> float:
+    # FIXME this is wrong and does not work with geography, use Location.distance_to instead
     """Calculate Euclidean distance between two locations"""
     return math.sqrt((loc1.latitude - loc2.latitude) ** 2 + (loc1.longitude - loc2.longitude) ** 2)
 
@@ -32,8 +33,8 @@ def calculate_distance(loc1: Location, loc2: Location) -> float:
 def random_location(boundaries: Boundaries) -> Location:
     """Generate a random location within boundaries"""
     geoSeries = geopandas.GeoSeries([boundaries.polygon])
-    location = geoSeries.sample_points(1)
-    return Location(location[0].x, location[0].y)
+    point: Point = geoSeries.sample_points(1)[0]  # type: ignore[assignment]
+    return Location(point.x, point.y)
 
 
 def random_health() -> HealthStatus:
@@ -45,7 +46,7 @@ def load_config_from_file(path: str) -> tuple[Boundaries, list]:
     with open(path, "r") as f:
         data = json.load(f)
     boundaries_data = data["boundaries"]
-    polygon_boundaries = [(boundry["lon"], boundry["lat"]) for boundry in boundaries_data]
+    polygon_boundaries = [(boundary["lon"], boundary["lat"]) for boundary in boundaries_data]
 
     # shapely.Polygon store data as (lon, lat)
     boundaries = Boundaries(Polygon(polygon_boundaries))
@@ -76,7 +77,7 @@ async def _main() -> None:
 
     for cow_data in cow_configs:
         cow_id = f"Cow-{cow_data['id']}"
-        start_pos = cow_data["start_position"]
+        start_pos = cow_data.get("start_position")
 
         if start_pos and "lat" in start_pos and "lon" in start_pos:
             initial_location = Location(start_pos["lat"], start_pos["lon"])
