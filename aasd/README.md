@@ -40,6 +40,17 @@ Run:
 uv run aasd [--scenario <PATH_TO_SCENARIO>]
 ```
 
+Available scenarios:
+
+- `all_infected.json` - All cows infected and spaced closely, should move away from each other
+- `base_infected.json` - One infected cow and four healthy, the healthy ones should move away
+- `infeasible.json` - Global boundaries too small to ensure proper spacing. Cows should move to boundary corners maximizing the distance between them
+- `oneline.json` - All cows aligned in one line, communication only between neighbors
+- `out_of_bounds.json` - Cows placed outside global boundaries, should move towards them
+- `spaced_apart.json` - Cows spaced to far for communication, should indicate how some cows posses outdated information
+
+### Development
+
 Run with debugger:
 
 ```shell
@@ -50,4 +61,18 @@ Run with autoreload:
 
 ```shell
 uv run watchmedo auto-restart --pattern "*.py" --recursive  aasd
+```
+
+Run tests:
+
+```shell
+uv run pytest
+```
+
+Lint and format:
+
+```shell
+uv run ruff check --fix
+uv run ruff format
+uv run mypy .
 ```
