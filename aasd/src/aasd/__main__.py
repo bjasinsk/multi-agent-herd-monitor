@@ -1,7 +1,9 @@
+import argparse
 import asyncio
 import json
 import math
 import random
+from pathlib import Path
 
 import geopandas
 import spade
@@ -10,21 +12,6 @@ from shapely.geometry import Point, Polygon
 
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
-
-# Chance that a cow mutates its health at a given interval. Higher values lead to more frequent changes.
-HEALTH_MUTATION_PROBABILITY = 0.01
-# Chance that a cow mutates its location at a given interval. Higher values lead to more frequent changes.
-LOC_MUTATION_PROBABILITY = 0.5
-# Range of location mutation as a fraction of total boundaries size
-LOC_MUTATION_RANGE = 0.01
-# Mutation interval in seconds
-MUTATION_INTERVAL_SECONDS = 1
-# Mutation interval jitter in seconds
-MUTATION_INTERVAL_JITTER_SECONDS = 0.1
-# Delay between sending state updates. Set this to a higher value to actually see anything.
-SEND_DELAY_SECONDS = 0.5
-# Distance between peers that allows for communication
-PEER_DISTANCE_THRESHOLD_METERS = 1000.0
 
 
 def calculate_distance(loc1: Location, loc2: Location) -> float:
@@ -45,7 +32,7 @@ def random_health() -> HealthStatus:
     return random.choices([HealthStatus.HEALTHY, HealthStatus.UNHEALTHY], weights=[0.8, 0.2], k=1)[0]
 
 
-def load_config_from_file(path: str) -> tuple[Boundaries, list]:
+def load_config_from_file(path: str) -> tuple[Boundaries, list, dict]:
     with open(path, "r") as f:
         data = json.load(f)
     boundaries_data = data["boundaries"]
@@ -54,19 +41,45 @@ def load_config_from_file(path: str) -> tuple[Boundaries, list]:
     # shapely.Polygon store data as (lon, lat)
     boundaries = Boundaries(Polygon(polygon_boundaries))
     cows_config = data.get("cows", [])
-    return boundaries, cows_config
+    params = data.get("params", {})
+    return boundaries, cows_config, params
 
 
 async def _main() -> None:
     """
     Cow herd tracking system with state synchronization
     """
+    parser = argparse.ArgumentParser(description="Cow Herd Tracking System")
+    parser.add_argument(
+        "--scenario", type=str, default="./scenarios/oneline.json", help="Path to the configuration file"
+    )
+    args = parser.parse_args()
+
     print(
         "Starting cow herd tracking system...\nI nothing happens, ensure that an XMPP server is running on localhost."
     )
     print("\n $ uv run spade run\n")
 
-    boundaries, cow_configs = load_config_from_file("./src/aasd/configs/globalboundaries.json")
+    boundaries, cow_configs, params = load_config_from_file(args.scenario)
+
+    # Chance that a cow mutates its health at a given interval. Higher values lead to more frequent changes.
+    HEALTH_MUTATION_PROBABILITY = params.get("health_mutation_probability", 0.01)
+    # Chance that a cow mutates its location at a given interval. Higher values lead to more frequent changes.
+    LOC_MUTATION_PROBABILITY = params.get("loc_mutation_probability", 0.5)
+    # Range of location mutation as a fraction of total boundaries size
+    LOC_MUTATION_RANGE = params.get("loc_mutation_range", 0.01)
+    # Mutation interval in seconds
+    MUTATION_INTERVAL_SECONDS = params.get("mutation_interval_seconds", 1)
+    # Mutation interval jitter in seconds
+    MUTATION_INTERVAL_JITTER_SECONDS = params.get("mutation_interval_jitter_seconds", 0.1)
+    # Delay between sending state updates. Set this to a higher value to actually see anything.
+    SEND_DELAY_SECONDS = params.get("send_delay_seconds", 0.5)
+    # Distance between peers that allows for communication
+    PEER_DISTANCE_THRESHOLD_METERS = params.get("peer_distance_threshold_meters", 1000.0)
+    # Interval for generating cow guidance
+    GUIDE_COW_INTERVAL_SECONDS = params.get("guide_cow_interval_seconds", 1.0)
+    # Interval for subscribing to peer updates
+    SUBSCRIBE_TO_PEERS_INTERVAL_SECONDS = params.get("subscribe_to_peers_interval_seconds", 10.0)
 
     cows: dict[str, CowAgent] = {}
 
@@ -77,6 +90,11 @@ async def _main() -> None:
             for peer in cows.values()
             if cow_location.distance_to(peer.location) <= PEER_DISTANCE_THRESHOLD_METERS and peer.cow_id != cow_id
         ]
+
+    # clear state dir
+    state_dir = Path("./state")
+    for file in state_dir.glob("Cow-*.json"):
+        file.unlink()
 
     for cow_data in cow_configs:
         cow_id = f"Cow-{cow_data['id']}"
@@ -107,6 +125,8 @@ async def _main() -> None:
             mutation_interval_jitter_seconds=MUTATION_INTERVAL_JITTER_SECONDS,
             send_delay_seconds=SEND_DELAY_SECONDS,
             get_peer_jids_in_range_fn=get_peer_jids_in_range,
+            guide_cow_interval_seconds=GUIDE_COW_INTERVAL_SECONDS,
+            subscribe_to_peers_interval_seconds=SUBSCRIBE_TO_PEERS_INTERVAL_SECONDS,
         )
         cows[cow.cow_id] = cow
 

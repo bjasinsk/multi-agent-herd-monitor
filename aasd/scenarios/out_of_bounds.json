@@ -1,0 +1,65 @@
+{
+  "boundaries": [
+    {
+      "lat": 52.1298,
+      "lon": 20.4559
+    },
+    {
+      "lat": 52.1315,
+      "lon": 20.4888
+    },
+    {
+      "lat": 52.1155,
+      "lon": 20.4884
+    },
+    {
+      "lat": 52.1107,
+      "lon": 20.4571
+    }
+  ],
+  "cows": [
+    {
+      "id": 1,
+      "start_position": {
+        "lat": 52.1378,
+        "lon": 20.4817
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 2,
+      "start_position": {
+        "lat": 52.1384,
+        "lon": 20.4711
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 3,
+      "start_position": {
+        "lat": 52.1383,
+        "lon": 20.4727
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 4,
+      "start_position": {
+        "lat": 52.1369,
+        "lon": 20.4728
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 5,
+      "start_position": {
+        "lat": 52.1380,
+        "lon": 20.4731
+      },
+      "health": "healthy"
+    }
+  ],
+  "params": {
+    "health_mutation_probability": 0.0
+  }
+}

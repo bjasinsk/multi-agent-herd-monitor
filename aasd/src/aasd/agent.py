@@ -42,6 +42,8 @@ class CowAgent(agent.Agent):
         loc_mutation_probability: float = 0.5,
         loc_mutation_range: float = 0.02,
         send_delay_seconds: float = 0.5,
+        guide_cow_interval_seconds: float = 1.0,
+        subscribe_to_peers_interval_seconds: float = 10.0,
         dump_state: bool = True,
     ) -> None:
         super().__init__(jid, password)
@@ -55,6 +57,9 @@ class CowAgent(agent.Agent):
         self.health_mutation_probability = health_mutation_probability
         self.loc_mutation_probability = loc_mutation_probability
         self.loc_mutation_range = loc_mutation_range
+
+        self.guide_cow_interval_seconds = guide_cow_interval_seconds
+        self.subscribe_to_peers_interval_seconds = subscribe_to_peers_interval_seconds
 
         self.global_state: dict[str, CowState] = {
             self.cow_id: CowState(
@@ -479,10 +484,10 @@ class CowAgent(agent.Agent):
         subscription_template.set_metadata("performative", "subscribe")
         self.add_behaviour(self.HandleSubscriptionsBehaviour(), template=subscription_template)
 
-        self.add_behaviour(self.SubscribeToPeerUpdatesBehaviour(period=10.0))
+        self.add_behaviour(self.SubscribeToPeerUpdatesBehaviour(period=self.subscribe_to_peers_interval_seconds))
 
         boundary_template = Template()
         boundary_template.set_metadata("ontology", "global_boundaries")
         boundary_template.set_metadata("performative", "inform")
         self.add_behaviour(self.ReceiveGlobalBoundariesBehaviour(), template=boundary_template)
-        self.add_behaviour(self.CowPositionLocalizerBehaviour(period=1.0))
+        self.add_behaviour(self.CowPositionLocalizerBehaviour(period=self.guide_cow_interval_seconds))
