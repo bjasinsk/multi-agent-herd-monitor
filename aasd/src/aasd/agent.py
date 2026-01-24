@@ -36,7 +36,11 @@ class CowAgent(agent.Agent):
         initial_health: HealthStatus,
         get_peer_jids_in_range_fn: Callable[[str], list[str]],
         *,
-        mutation_probability: float = 0.02,
+        mutation_interval_seconds: float = 0.2,
+        mutation_interval_jitter_seconds: float = 0.1,
+        health_mutation_probability: float = 0.01,
+        loc_mutation_probability: float = 0.5,
+        loc_mutation_range: float = 0.02,
         send_delay_seconds: float = 0.5,
         dump_state: bool = True,
     ) -> None:
@@ -44,8 +48,13 @@ class CowAgent(agent.Agent):
         self.cow_id: str = cow_id
         self.known_agents: list[str] = []
         self.boundaries: Boundaries = boundaries
-        self.mutation_probability: float = mutation_probability
         self.send_delay_seconds: float = send_delay_seconds
+
+        self.mutation_interval_seconds = mutation_interval_seconds
+        self.mutation_interval_jitter_seconds = mutation_interval_jitter_seconds
+        self.health_mutation_probability = health_mutation_probability
+        self.loc_mutation_probability = loc_mutation_probability
+        self.loc_mutation_range = loc_mutation_range
 
         self.global_state: dict[str, CowState] = {
             self.cow_id: CowState(
@@ -66,6 +75,8 @@ class CowAgent(agent.Agent):
 
         self.state_needs_broadcast_event = asyncio.Event()
 
+        self._guidance_active = False
+
     @property
     def state(self) -> CowState:
         """Get current state of this cow from the state dict"""
@@ -80,7 +91,12 @@ class CowAgent(agent.Agent):
         """Dump current state to a JSON file"""
         state_file = self.state_dump_dir / f"{self.cow_id}.json"
         with open(state_file, "w") as f:
-            json.dump(self.global_state_dict, f, indent=2)
+            state_with_internal = self.global_state_dict | {
+                "internal": {
+                    "guidance_active": self._guidance_active,
+                }
+            }
+            json.dump(state_with_internal, f, indent=2)
 
     def add_peer(self, peer_jid: str) -> bool:
         if peer_jid in self.known_agents:
@@ -137,7 +153,7 @@ class CowAgent(agent.Agent):
             if not msg:
                 return
 
-            print(f"DEBUG: [{self.agent.cow_id}] RECEIVED GLOBAL BOUNDARIES MESSAGE", msg.body)
+            # print(f"DEBUG: [{self.agent.cow_id}] RECEIVED GLOBAL BOUNDARIES MESSAGE", msg.body)
 
             try:
                 data = json.loads(msg.body)
@@ -157,7 +173,7 @@ class CowAgent(agent.Agent):
 
             if timestamp > own_state.timestamp:
                 self.agent.boundaries = new_boundaries
-                print(f"DEBUG: [{self.agent.cow_id}] UPDATED boundaries:", new_boundaries)
+                # print(f"DEBUG: [{self.agent.cow_id}] UPDATED boundaries:", new_boundaries)
                 self.agent.global_state[self.agent.cow_id] = CowState(
                     location=own_state.location,
                     health=own_state.health,
@@ -176,7 +192,10 @@ class CowAgent(agent.Agent):
             movement_map = self.agent.generate_map()
 
             if not check_cow_position(self.agent.state, movement_map):
+                self.agent._guidance_active = True
                 self.guide_cow(movement_map)
+            else:
+                self.agent._guidance_active = False
 
         def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> None:
             actual_location = self.agent.state.location
@@ -184,6 +203,7 @@ class CowAgent(agent.Agent):
 
             # Check boundaries
             if not is_inside_global_boundaries(actual_location, actual_boundaries):
+                print(f"{self.agent.cow_id:<7} Moving back inside boundaries")
                 new_location = move_towards_box(actual_location, actual_boundaries, step)
 
                 self.agent.global_state[self.agent.cow_id] = CowState(
@@ -199,6 +219,10 @@ class CowAgent(agent.Agent):
             in_infected_radius = check_infected_radius(self.agent.state, actual_location, movement_map)
             if in_infected_radius is not None:
                 infected_location, avoid_radius = in_infected_radius
+
+                print(
+                    f"{self.agent.cow_id:<7} Avoiding infection at ({infected_location.latitude:.5f}, {infected_location.longitude:.5f})"
+                )
 
                 new_location = self.avoid_infection(
                     actual_location,
@@ -256,45 +280,53 @@ class CowAgent(agent.Agent):
         agent: CowAgent
 
         async def run(self) -> None:
-            if not self.agent.known_agents or random.random() > self.agent.mutation_probability:
+            await asyncio.sleep(random.uniform(0, self.agent.mutation_interval_jitter_seconds))
+
+            if mutated_health := random.random() < self.agent.health_mutation_probability:
+                self.mutate_health()
+            if mutated_location := random.random() < self.agent.loc_mutation_probability:
+                self.mutate_location()
+
+            if not (mutated_health or mutated_location):
                 return
 
-            self.mutate_random_property()
-
-            own_state = self.agent.global_state[self.agent.cow_id]
-            print(
-                f"{self.agent.cow_id:<7} UPDATED ({own_state.location.latitude:.5f}, {own_state.location.longitude:.5f}) {own_state.health.value}"
-            )
+            # own_state = self.agent.global_state[self.agent.cow_id]
+            # print(
+            # f"{self.agent.cow_id:<7} UPDATED ({own_state.location.latitude:.5f}, {own_state.location.longitude:.5f}) {own_state.health.value}"
+            # )
 
             self.agent.state_needs_broadcast_event.set()
 
-        def mutate_random_property(self) -> None:
-            """Randomly mutate one of cow's properties"""
-            property_choice = random.choices(["location", "health"], weights=[0.9, 0.1])[0]
-
+        def mutate_health(self) -> None:
+            """Randomly mutate cow's health status"""
             own_state = self.agent.state
+            new_health = HealthStatus.HEALTHY if own_state.health == HealthStatus.UNHEALTHY else HealthStatus.UNHEALTHY
 
-            if property_choice == "location":
-                min_lon, min_lat, max_lon, max_lat = self.agent.boundaries.polygon.bounds
-                lat_max_delta = (max_lat - min_lat) * 0.1
-                lon_max_delta = (max_lon - min_lon) * 0.1
-                lat = random.uniform(
-                    own_state.location.latitude - lat_max_delta, own_state.location.latitude + lat_max_delta
-                )
-                lon = random.uniform(
-                    own_state.location.longitude - lon_max_delta, own_state.location.longitude + lon_max_delta
-                )
-                new_location = Location(lat, lon)
-                new_health = own_state.health
-            elif property_choice == "health":
-                new_health = (
-                    HealthStatus.HEALTHY if own_state.health == HealthStatus.UNHEALTHY else HealthStatus.UNHEALTHY
-                )
-                new_location = own_state.location
+            self.agent.global_state[self.agent.cow_id] = CowState(
+                location=own_state.location,
+                health=new_health,
+                boundaries=own_state.boundaries,
+                timestamp=time.time(),
+                peers=self.agent.known_agents.copy(),
+            )
+
+        def mutate_location(self) -> None:
+            """Randomly mutate cow's location"""
+            own_state = self.agent.state
+            min_lon, min_lat, max_lon, max_lat = self.agent.boundaries.polygon.bounds
+            lat_max_delta = (max_lat - min_lat) * self.agent.loc_mutation_range
+            lon_max_delta = (max_lon - min_lon) * self.agent.loc_mutation_range
+            lat = random.uniform(
+                own_state.location.latitude - lat_max_delta, own_state.location.latitude + lat_max_delta
+            )
+            lon = random.uniform(
+                own_state.location.longitude - lon_max_delta, own_state.location.longitude + lon_max_delta
+            )
+            new_location = Location(lat, lon)
 
             self.agent.global_state[self.agent.cow_id] = CowState(
                 location=new_location,
-                health=new_health,
+                health=own_state.health,
                 boundaries=own_state.boundaries,
                 timestamp=time.time(),
                 peers=self.agent.known_agents.copy(),
@@ -315,15 +347,15 @@ class CowAgent(agent.Agent):
                 print(f"Cow {self.agent.cow_id:<7} Received malformed message")
 
             received_state = data["state"]
-            sender_id = data["sender"]
+            # sender_id = data["sender"]
 
             state_changed = self.consolidate_state(received_state)
 
             if not state_changed:
-                print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
+                # print(f"{self.agent.cow_id:<7} Received null-update from {sender_id}, not propagating")
                 return
 
-            print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}")
+            # print(f"{self.agent.cow_id:<7} Received update from {sender_id:<7}")
 
             self.agent.state_needs_broadcast_event.set()
 
@@ -356,9 +388,9 @@ class CowAgent(agent.Agent):
         async def run(self) -> None:
             await self.agent.state_needs_broadcast_event.wait()
 
-            print(
-                f"{self.agent.cow_id:<7} Propagate state change to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
-            )
+            # print(
+            #     f"{self.agent.cow_id:<7} Propagate state change to {', '.join([p.split('@')[0] for p in self.agent.known_agents])}"
+            # )
 
             if self.agent.dump_state:
                 self.agent.dump_state_to_file()
@@ -382,7 +414,7 @@ class CowAgent(agent.Agent):
                 print(f"{self.agent.cow_id:<7} Removed subscriber {subscriber}")
 
             for peer_jid in self.agent.known_agents:
-                print(f"DEBUG: [{self.agent.cow_id}] PROPAGATING STATE to peer:", peer_jid)
+                # print(f"DEBUG: [{self.agent.cow_id}] PROPAGATING STATE to peer:", peer_jid)
                 msg = Message(to=peer_jid, sender=self.agent.jid, metadata=msg_metadata, body=msg_body)
                 asyncio.create_task(self.send(msg))
 
@@ -411,7 +443,7 @@ class CowAgent(agent.Agent):
             if not msg:
                 return
 
-            print(f"[{self.agent.cow_id}] RECEIVED STATE FROM PEER:", msg.sender)
+            # print(f"[{self.agent.cow_id}] RECEIVED STATE FROM PEER:", msg.sender)
 
             subscriber_jid = msg.sender
 
@@ -431,21 +463,23 @@ class CowAgent(agent.Agent):
         if self.dump_state:
             self.dump_state_to_file()
 
-        self.add_behaviour(self.CowHealthChecker(period=1.0))
-
-        self.add_behaviour(self.BroadcastStateBehaviour())
+        self.add_behaviour(
+            self.CowHealthChecker(period=max(0, self.mutation_interval_seconds - self.mutation_interval_jitter_seconds))
+        )
 
         state_broadcast_template = Template()
         state_broadcast_template.set_metadata("ontology", "cow_state")
         state_broadcast_template.set_metadata("performative", "inform")
         self.add_behaviour(self.ReceiveStateUpdateBehaviour(), template=state_broadcast_template)
 
-        self.add_behaviour(self.SubscribeToPeerUpdatesBehaviour(period=10.0))
+        self.add_behaviour(self.BroadcastStateBehaviour())
 
         subscription_template = Template()
         subscription_template.set_metadata("ontology", "cow_state")
         subscription_template.set_metadata("performative", "subscribe")
         self.add_behaviour(self.HandleSubscriptionsBehaviour(), template=subscription_template)
+
+        self.add_behaviour(self.SubscribeToPeerUpdatesBehaviour(period=10.0))
 
         boundary_template = Template()
         boundary_template.set_metadata("ontology", "global_boundaries")

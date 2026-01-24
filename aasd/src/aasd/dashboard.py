@@ -36,6 +36,7 @@ def get_actual_states(agent_states: Dict[str, Dict[str, Any]]) -> Dict[str, Dict
     for cow_id, full_state in agent_states.items():
         if cow_id in full_state:
             actual_states[cow_id] = full_state[cow_id]
+            actual_states[cow_id]["internal"] = full_state["internal"]
     return actual_states
 
 
@@ -113,6 +114,17 @@ def render_location_plot() -> None:
                 }
             )
 
+    active_guidance_markers = []
+    for cow_id, state in actual_states.items():
+        if state["internal"]["guidance_active"]:
+            loc = state["location"]
+            active_guidance_markers.append(
+                {
+                    "lon": loc["longitude"],
+                    "lat": loc["latitude"],
+                    "radius": 100,
+                }
+            )
     boundary_layer = None
 
     if actual_states:
@@ -211,6 +223,18 @@ def render_location_plot() -> None:
             filled=True,
         )
 
+        guidance_layer = pdk.Layer(
+            "ScatterplotLayer",
+            active_guidance_markers,
+            get_position=["lon", "lat"],
+            get_radius="radius",
+            get_color=[0, 0, 255, 80],
+            line_width_min_pixels=10,
+            pickable=False,
+            stroked=True,
+            filled=False,
+        )
+
         text_layer = pdk.Layer(
             "TextLayer",
             df,
@@ -232,7 +256,7 @@ def render_location_plot() -> None:
         if boundary_layer:
             layers.append(boundary_layer)
 
-        layers.extend([line_layer, circle_layer, infected_layer, text_layer])
+        layers.extend([line_layer, circle_layer, infected_layer, text_layer, guidance_layer])
 
         deck = pdk.Deck(
             layers=layers,

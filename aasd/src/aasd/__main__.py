@@ -11,13 +11,16 @@ from shapely.geometry import Point, Polygon
 from aasd.agent import Boundaries, CowAgent, HealthStatus, Location
 from aasd.shepherd import ShepherdAgent
 
-# How many cows to spawn
-NUM_AGENTS = 15
-# Set to 0 to arrange cows in a minimum spanning tree (information propagation stops by itself when it reaches leaves)
-# Every value >0 adds that many extra edges to create cycles (agents must stop propagation by themselves)
-NUM_EXTRA_EDGES = 1
-# Chance that a cow mutates its location or health at a given second. Higher values lead to more frequent changes.
-MUTATION_PROBABILITY = 0.05
+# Chance that a cow mutates its health at a given interval. Higher values lead to more frequent changes.
+HEALTH_MUTATION_PROBABILITY = 0.01
+# Chance that a cow mutates its location at a given interval. Higher values lead to more frequent changes.
+LOC_MUTATION_PROBABILITY = 0.5
+# Range of location mutation as a fraction of total boundaries size
+LOC_MUTATION_RANGE = 0.01
+# Mutation interval in seconds
+MUTATION_INTERVAL_SECONDS = 1
+# Mutation interval jitter in seconds
+MUTATION_INTERVAL_JITTER_SECONDS = 0.1
 # Delay between sending state updates. Set this to a higher value to actually see anything.
 SEND_DELAY_SECONDS = 0.5
 # Distance between peers that allows for communication
@@ -97,7 +100,11 @@ async def _main() -> None:
             boundaries=boundaries,
             initial_location=initial_location,
             initial_health=initial_health,
-            mutation_probability=MUTATION_PROBABILITY,
+            health_mutation_probability=HEALTH_MUTATION_PROBABILITY,
+            loc_mutation_probability=LOC_MUTATION_PROBABILITY,
+            loc_mutation_range=LOC_MUTATION_RANGE,
+            mutation_interval_seconds=MUTATION_INTERVAL_SECONDS,
+            mutation_interval_jitter_seconds=MUTATION_INTERVAL_JITTER_SECONDS,
             send_delay_seconds=SEND_DELAY_SECONDS,
             get_peer_jids_in_range_fn=get_peer_jids_in_range,
         )
@@ -109,7 +116,6 @@ async def _main() -> None:
     shepherd = ShepherdAgent("shepherd@localhost", "password", boundaries)
     await shepherd.start()
 
-    print(f"\nAll {NUM_AGENTS} cows started. They will update properties at random intervals.")
     print("Press Ctrl+C to stop...\n")
 
     try:
