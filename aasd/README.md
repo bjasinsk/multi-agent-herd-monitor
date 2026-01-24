@@ -37,7 +37,7 @@ uv run streamlit run src/aasd/dashboard.py
 Run:
 
 ```shell
-uv run aasd [--scenario <PATH_TO_SCENARIO>]
+uv run aasd [--scenario <PATH_TO_SCENARIO>] [-v|--verbose]
 ```
 
 Available scenarios:
