@@ -28,11 +28,28 @@ Start the spade Server in the background (kindly ignore the errors):
 uv run spade run
 ```
 
+Run the Streamlit live dashboard:
+
+```shell
+uv run streamlit run src/aasd/dashboard.py
+```
+
 Run:
 
 ```shell
-uv run aasd
+uv run aasd [--scenario <PATH_TO_SCENARIO>] [-v|--verbose]
 ```
+
+Available scenarios:
+
+- `all_infected.json` - All cows infected and spaced closely, should move away from each other
+- `base_infected.json` - One infected cow and four healthy, the healthy ones should move away
+- `infeasible.json` - Global boundaries too small to ensure proper spacing. Cows should move to boundary corners maximizing the distance between them
+- `oneline.json` - All cows aligned in one line, communication only between neighbors
+- `out_of_bounds.json` - Cows placed outside global boundaries, should move towards them
+- `spaced_apart.json` - Cows spaced to far for communication, should indicate how some cows posses outdated information
+
+### Development
 
 Run with debugger:
 
@@ -46,8 +63,16 @@ Run with autoreload:
 uv run watchmedo auto-restart --pattern "*.py" --recursive  aasd
 ```
 
-Run the Streamlit live dashboard:
+Run tests:
 
 ```shell
-uv run streamlit run src/aasd/dashboard.py
+uv run pytest
+```
+
+Lint and format:
+
+```shell
+uv run ruff check --fix
+uv run ruff format
+uv run mypy .
 ```
