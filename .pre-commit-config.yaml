@@ -10,12 +10,6 @@ repos:
   rev: v1.15.0
   hooks:
   - id: mypy
-    additional_dependencies: [
-          "shapely>=2.0",       # Shapely 2.0+ includes type hints
-          "geopandas",          # Needed for geopandas imports
-          # "types-shapely",      # Explicit stubs (recommended by your logs)
-          # "types-geopandas"     # Explicit stubs for geopandas
-        ]
     pass_filenames: false  # suppress the normal filename passing
     files: ^aasd/  # filter the files down to a specific subdirectory
     # pre-commit only supports running at the root of a repo since that's where
