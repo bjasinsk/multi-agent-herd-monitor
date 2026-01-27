@@ -18,7 +18,6 @@ from spade.template import Template
 
 from aasd.agent_commons import Boundaries, CowState, HealthStatus, Location, MovementMap
 from aasd.map_commons import (
-    check_cow_position,
     check_infected_radius,
     is_inside_global_boundaries,
     move_towards_box,
@@ -181,7 +180,7 @@ class CowAgent(agent.Agent):
             infected_areas=infected_areas,
         )
 
-    def get_healthy_cows_in_radius(self, radius: float):
+    def get_healthy_cows_in_radius(self, radius: float) -> list[Location]:
         ret_val: list[Location] = []
         for cow_id, cow in self.global_state.items():
             if cow.health == HealthStatus.HEALTHY and cow.location.distance_to(self.location) < radius:
@@ -292,11 +291,13 @@ class CowAgent(agent.Agent):
 
             # Check boundaries
             if not is_inside_global_boundaries(actual_location, actual_boundaries):
+                guidance = True
                 if self.agent.verbose_logging:
                     print(f"{self.agent.cow_id:<7} Moving back inside boundaries")
                 new_location = move_towards_box(actual_location, actual_boundaries, step)
             # Avoid infected radius (also applies to infected cows, but not from "itself")
             elif in_infected_radius is not None:
+                guidance = True
                 infected_location, avoid_radius = in_infected_radius
 
                 if self.agent.verbose_logging:
@@ -311,6 +312,7 @@ class CowAgent(agent.Agent):
                     step_degrees=self.agent.avoid_infection_step,
                 )
             else:
+                guidance = False
                 new_location = self.clustering_movement()
 
             self.agent.global_state[self.agent.cow_id] = CowState(
@@ -321,12 +323,14 @@ class CowAgent(agent.Agent):
                 peers=self.agent.known_agents.copy(),
             )
 
-            guidance_delta = Location(
-                new_location.latitude - actual_location.latitude,
-                new_location.longitude - actual_location.longitude,
-            )
-
-            return guidance_delta
+            if guidance:
+                guidance_delta = Location(
+                    new_location.latitude - actual_location.latitude,
+                    new_location.longitude - actual_location.longitude,
+                )
+                return guidance_delta
+            else:
+                return None
 
         def avoid_infection(
             self,
