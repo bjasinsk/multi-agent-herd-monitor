@@ -9,6 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
+import numpy as np
 from shapely.geometry import Polygon
 from spade import agent
 from spade.behaviour import CyclicBehaviour, PeriodicBehaviour
@@ -45,6 +46,12 @@ class CowAgent(agent.Agent):
         guide_cow_interval_seconds: float = 1.0,
         subscribe_to_peers_interval_seconds: float = 10.0,
         infectious_radius_meters: float = 300.0,
+        avg_latitude: float = 52.16,
+        clustering_movement_detection_radius_meters: float = 1000,
+        clustering_movement_cohesion: float = 0.00005,
+        clustering_movement_separation: float = 0.005,
+        clustering_movement_min_sep_dist: float = 0.001,
+        avoid_infection_step: float = 0.0001,
         dump_state: bool = True,
         verbose_logging: bool = False,
     ) -> None:
@@ -64,6 +71,14 @@ class CowAgent(agent.Agent):
         self.subscribe_to_peers_interval_seconds = subscribe_to_peers_interval_seconds
 
         self.infectious_radius_meters = infectious_radius_meters
+
+        self.avg_latitude = avg_latitude
+        self.clustering_movement_detection_radius_meters = clustering_movement_detection_radius_meters
+        self.clustering_movement_cohesion = clustering_movement_cohesion
+        self.clustering_movement_separation = clustering_movement_separation
+        self.clustering_movement_min_sep_dist = clustering_movement_min_sep_dist
+
+        self.avoid_infection_step = avoid_infection_step
 
         self.global_state: dict[str, CowState] = {
             self.cow_id: CowState(
@@ -166,6 +181,13 @@ class CowAgent(agent.Agent):
             infected_areas=infected_areas,
         )
 
+    def get_healthy_cows_in_radius(self, radius: float):
+        ret_val: list[Location] = []
+        for cow_id, cow in self.global_state.items():
+            if cow.health == HealthStatus.HEALTHY and cow.location.distance_to(self.location) < radius:
+                ret_val.append(cow.location)
+        return ret_val
+
     class ReceiveGlobalBoundariesBehaviour(CyclicBehaviour):
         agent: CowAgent
 
@@ -190,7 +212,6 @@ class CowAgent(agent.Agent):
                 return
 
             new_boundaries = Boundaries(Polygon(shapely_coords))
-
             own_state = self.agent.state
 
             if timestamp > own_state.timestamp:
@@ -215,41 +236,67 @@ class CowAgent(agent.Agent):
         async def run(self) -> None:
             movement_map = self.agent.generate_map()
 
-            if not check_cow_position(self.agent.state, movement_map):
-                delta = self.guide_cow(movement_map)
-                self.agent._guidance_delta = delta
-                self.agent.state_needs_broadcast_event.set()
-            else:
-                self.agent._guidance_delta = None
+            delta = self.guide_cow(movement_map)
+            self.agent._guidance_delta = delta
+            self.agent.state_needs_broadcast_event.set()
+
+        def clustering_movement(self) -> Location:
+            LON_SCALE = math.cos(math.radians(self.agent.avg_latitude))
+
+            peers_locations = self.agent.get_healthy_cows_in_radius(
+                self.agent.clustering_movement_detection_radius_meters
+            )
+            curr_location = self.agent.location
+
+            peers_vecs: list[tuple[float, float]] = []
+
+            for location in peers_locations:
+                dy = location.latitude - curr_location.latitude
+                dx = (location.longitude - curr_location.longitude) * LON_SCALE
+                peers_vecs.append((dx, dy))
+
+            vecs_array = np.array(peers_vecs)
+            force = np.zeros(2)
+
+            if len(vecs_array) > 0:
+                # Cohesion
+                centroid = np.mean(vecs_array, axis=0)
+                dist_c = np.linalg.norm(centroid)
+                if dist_c > 0:
+                    force += (centroid / dist_c) * self.agent.clustering_movement_cohesion
+
+                # Separation
+                dists = np.linalg.norm(vecs_array, axis=1)
+                crowding = vecs_array[dists < self.agent.clustering_movement_min_sep_dist]
+                if len(crowding) > 0:
+                    push = -np.sum(
+                        crowding / (dists[dists < self.agent.clustering_movement_min_sep_dist][:, None] + 1e-9), axis=0
+                    )
+                    dist_s = np.linalg.norm(push)
+                    if dist_s > 0:
+                        force += (push / dist_s) * self.agent.clustering_movement_separation
+
+            d_lat = force[1]
+            d_lon = force[0] / LON_SCALE  # Un-scale the longitude
+            # print(f"clustering_movement entry: dlat: {d_lat} ({type(d_lat)}), dlon: {d_lon}")
+            new_location = Location(
+                latitude=self.agent.location.latitude + d_lat, longitude=self.agent.location.longitude + d_lon
+            )
+            # print(f"clustering_movement entry: new location: {new_location.latitude}, {new_location.longitude}")
+            return new_location
 
         def guide_cow(self, movement_map: MovementMap, step: float = 0.0001) -> Location | None:
             actual_location = self.agent.state.location
             actual_boundaries = movement_map.boundaries
+            in_infected_radius = check_infected_radius(self.agent.state, actual_location, movement_map)
 
             # Check boundaries
             if not is_inside_global_boundaries(actual_location, actual_boundaries):
                 if self.agent.verbose_logging:
                     print(f"{self.agent.cow_id:<7} Moving back inside boundaries")
                 new_location = move_towards_box(actual_location, actual_boundaries, step)
-
-                self.agent.global_state[self.agent.cow_id] = CowState(
-                    location=new_location,
-                    health=self.agent.state.health,
-                    boundaries=actual_boundaries,
-                    timestamp=time.time(),
-                    peers=self.agent.known_agents.copy(),
-                )
-
-                guidance_delta = Location(
-                    new_location.latitude - actual_location.latitude,
-                    new_location.longitude - actual_location.longitude,
-                )
-
-                return guidance_delta
-
             # Avoid infected radius (also applies to infected cows, but not from "itself")
-            in_infected_radius = check_infected_radius(self.agent.state, actual_location, movement_map)
-            if in_infected_radius is not None:
+            elif in_infected_radius is not None:
                 infected_location, avoid_radius = in_infected_radius
 
                 if self.agent.verbose_logging:
@@ -261,28 +308,25 @@ class CowAgent(agent.Agent):
                     actual_location,
                     infected_location,
                     actual_boundaries,
+                    step_degrees=self.agent.avoid_infection_step,
                 )
+            else:
+                new_location = self.clustering_movement()
 
-                self.agent._guidance_delta = Location(
-                    new_location.latitude - actual_location.latitude,
-                    new_location.longitude - actual_location.longitude,
-                )
+            self.agent.global_state[self.agent.cow_id] = CowState(
+                location=new_location,
+                health=self.agent.state.health,
+                boundaries=actual_boundaries,
+                timestamp=time.time(),
+                peers=self.agent.known_agents.copy(),
+            )
 
-                self.agent.global_state[self.agent.cow_id] = CowState(
-                    location=new_location,
-                    health=self.agent.state.health,
-                    boundaries=actual_boundaries,
-                    timestamp=time.time(),
-                    peers=self.agent.known_agents.copy(),
-                )
+            guidance_delta = Location(
+                new_location.latitude - actual_location.latitude,
+                new_location.longitude - actual_location.longitude,
+            )
 
-                guidance_delta = Location(
-                    new_location.latitude - actual_location.latitude,
-                    new_location.longitude - actual_location.longitude,
-                )
-
-                return guidance_delta
-            return None
+            return guidance_delta
 
         def avoid_infection(
             self,

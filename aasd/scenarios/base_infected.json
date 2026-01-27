@@ -60,6 +60,7 @@
     }
   ],
   "params": {
-    "health_mutation_probability": 0.0
+    "health_mutation_probability": 0.0,
+    "avoid_infection_step": 0.0002
   }
 }
