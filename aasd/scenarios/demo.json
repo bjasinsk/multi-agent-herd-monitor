@@ -1,0 +1,188 @@
+{
+  "boundaries": [
+    {
+      "lat": 52.12179471771564,
+      "lon": 20.46099859365917
+    },
+    {
+      "lat": 52.1298,
+      "lon": 20.4559
+    },
+    {
+      "lat": 52.13088507592759,
+      "lon": 20.467974946218884
+    },
+    {
+      "lat": 52.1315,
+      "lon": 20.4888
+    },
+    {
+      "lat": 52.1155,
+      "lon": 20.4884
+    },
+    {
+      "lat": 52.11292950467769,
+      "lon": 20.47410377134431
+    }
+  ],
+  "cows": [
+    {
+      "id": 1,
+      "start_position": {
+        "lat": 52.1196593922569,
+        "lon": 20.46054585157594
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 2,
+      "start_position": {
+        "lat": 52.12100870188678,
+        "lon": 20.482290139337117
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 3,
+      "start_position": {
+        "lat": 52.1273,
+        "lon": 20.4677
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 4,
+      "start_position": {
+        "lat": 52.1159,
+        "lon": 20.4678
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 5,
+      "start_position": {
+        "lat": 52.1170,
+        "lon": 20.4781
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 6,
+      "start_position": {
+        "lat": 52.124797636235456,
+        "lon": 20.463415365284366
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 7,
+      "start_position": {
+        "lat": 52.12852647882882,
+        "lon": 20.47575541291791
+      },
+      "health": "unhealthy"
+    },
+    {
+      "id": 8,
+      "start_position": {
+        "lat": 52.11444537919118,
+        "lon": 20.47892148101342
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 9,
+      "start_position": {
+        "lat": 52.12698733645039,
+        "lon": 20.458517886625728
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 10,
+      "start_position": {
+        "lat": 52.1229000095902,
+        "lon": 20.477231183130634
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 11,
+      "start_position": {
+        "lat": 52.117606097447606,
+        "lon": 20.472510414530422
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 12,
+      "start_position": {
+        "lat": 52.119896616220885,
+        "lon": 20.465689657103802
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 13,
+      "start_position": {
+        "lat": 52.124086963918245,
+        "lon": 20.46798610285221
+      },
+      "health": "unhealthy"
+    },
+    {
+      "id": 14,
+      "start_position": {
+        "lat": 52.12765780985763,
+        "lon": 20.485571199094874
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 15,
+      "start_position": {
+        "lat": 52.129185667369754,
+        "lon": 20.478182153374497
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 16,
+      "start_position": {
+        "lat": 52.12977821321411,
+        "lon": 20.482670939250198
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 17,
+      "start_position": {
+        "lat": 52.12973583528928,
+        "lon": 20.482429171264673
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 18,
+      "start_position": {
+        "lat":  52.11418920944306,
+        "lon": 20.462246048135047
+      },
+      "health": "healthy"
+    },
+    {
+      "id": 19,
+      "start_position": {
+        "lat": 52.1219128138296,
+        "lon": 20.4780787440957
+      },
+      "health": "unhealthy"
+    }
+  ],
+  "params": {
+    "health_mutation_probability": 0.0,
+    "peer_distance_threshold_meters": 500.0,
+    "subscribe_to_peers_interval_seconds": 1.0,
+    "clustering_movement_cohesion": 0.00001
+  }
+}

@@ -19,49 +19,40 @@
   ],
   "cows": [
     {
-      "id": 1,
-      "start_position": {
-        "lat": 52.1218,
-        "lon": 20.4717
-      },
-      "health": "unhealthy"
-    },
-    {
       "id": 2,
       "start_position": {
-        "lat": 52.1224,
-        "lon": 20.4711
+        "lat": 52.1254,
+        "lon": 20.4761
       },
       "health": "healthy"
     },
     {
       "id": 3,
       "start_position": {
-        "lat": 52.1223,
-        "lon": 20.4727
+        "lat": 52.1273,
+        "lon": 20.4677
       },
       "health": "healthy"
     },
     {
       "id": 4,
       "start_position": {
-        "lat": 52.1209,
-        "lon": 20.4728
+        "lat": 52.1159,
+        "lon": 20.4678
       },
       "health": "healthy"
     },
     {
       "id": 5,
       "start_position": {
-        "lat": 52.1220,
-        "lon": 20.4731
+        "lat": 52.1170,
+        "lon": 20.4781
       },
       "health": "healthy"
     }
   ],
   "params": {
     "health_mutation_probability": 0.0,
-    "avoid_infection_step": 0.0002,
-    "infectious_radius_meters": 400.0
+    "peer_distance_threshold_meters": 1000.0
   }
 }
