@@ -83,6 +83,18 @@ async def _main() -> None:
     SUBSCRIBE_TO_PEERS_INTERVAL_SECONDS = params.get("subscribe_to_peers_interval_seconds", 10.0)
     # Infectious radius in meters
     INFECTIOUS_RADIUS_METERS = params.get("infectious_radius_meters", 300.0)
+    # average latitude for simplified movement calculation, defaults to latitude for Warsaw
+    AVG_LATITUDE = params.get("avg_latitude", 52.16)
+    # Detection radius for peers for clustering movement
+    CLUSTERING_MOVEMENT_DETECTION_RADIUS_METERS = params.get("clustering_movement_detection_radius_meters", 1000)
+    # Cohesion coefficient for clustering movement (more -> moves more rapidly towards other cows)
+    CLUSTERING_MOVEMENT_COHESION = params.get("clustering_movement_cohesion", 0.00005)
+    # Separation coefficient for clustering movement (more -> escapes more rapidly when too close with other cow)
+    CLUSTERING_MOVEMENT_SEPARATION = params.get("clustering_movements_separation", 0.0001)
+    # Distance for which separation coefficient starts impacting movement
+    CLUSTERING_MOVEMENT_MIN_SEP_DIST = params.get("clustering_movement_min_sep_dist", 0.001)
+    # Step for movement when avoiding infection (more -> escapes more rapidly from an infected cow)
+    AVOID_INFECTION_STEP = params.get("avoid_infection_step", 0.0001)
 
     cows: dict[str, CowAgent] = {}
 
@@ -131,6 +143,12 @@ async def _main() -> None:
             guide_cow_interval_seconds=GUIDE_COW_INTERVAL_SECONDS,
             subscribe_to_peers_interval_seconds=SUBSCRIBE_TO_PEERS_INTERVAL_SECONDS,
             infectious_radius_meters=INFECTIOUS_RADIUS_METERS,
+            avg_latitude=AVG_LATITUDE,
+            clustering_movement_detection_radius_meters=CLUSTERING_MOVEMENT_DETECTION_RADIUS_METERS,
+            clustering_movement_cohesion=CLUSTERING_MOVEMENT_COHESION,
+            clustering_movement_separation=CLUSTERING_MOVEMENT_SEPARATION,
+            clustering_movement_min_sep_dist=CLUSTERING_MOVEMENT_MIN_SEP_DIST,
+            avoid_infection_step=AVOID_INFECTION_STEP,
             verbose_logging=args.verbose,
         )
         cows[cow.cow_id] = cow

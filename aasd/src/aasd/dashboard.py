@@ -48,7 +48,7 @@ def build_knowledge_consistency_data(agent_states: Dict[str, Dict[str, Any]]) ->
     actual_states = get_actual_states(agent_states)
 
     for observer_id, observer_knowledge in agent_states.items():
-        for cow_id in sorted(agent_states.keys()):
+        for cow_id in sorted(agent_states.keys(), key=lambda x: int(x.split("-")[1])):
             if cow_id == observer_id:
                 continue
 
@@ -300,8 +300,9 @@ def render_location_plot() -> None:
 
         st.pydeck_chart(deck, width="stretch")
 
+        df_sorted = df.sort_values(by="cow_id", key=lambda x: x.str.extract(r"(\d+)")[0].astype(int))
         st.dataframe(
-            df[["cow_id", "lat", "lon", "health"]],
+            df_sorted[["cow_id", "lat", "lon", "health"]],
             width="stretch",
             hide_index=True,
         )
