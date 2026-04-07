@@ -25,6 +25,13 @@ When abnormal conditions are detected, the system can dynamically adjust the mov
 
 ---
 
+# Visualization
+
+![alt text](docs/image.png)
+
+On the screenshot, you can see the system control panel. The shepherd can define the area where the cows are allowed to move. The smart collar system is intended to keep them within that designated area and prevent the spread of disease.
+
+
 # System Architecture
 
 The system is based on a **multi-agent architecture** consisting of two main agent types.
