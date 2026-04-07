@@ -216,23 +216,6 @@ If no constraints apply, cows move according to a herd cohesion model.
 
 Cows tend to move toward the center of nearby healthy cows while maintaining separation.
 
-Group center calculation:
-
-    c = (1/N) * Σ v_i
-
-Where:
-
-- N — number of nearby cows
-- v_i — vector toward cow i
-- λ — longitude
-- φ — latitude
-
-Movement vector components:
-
-- cohesion — move toward herd center
-- separation — move away from cows that are too close
-
-This simulates natural herd behaviour.
 
 ---
 
