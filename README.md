@@ -51,9 +51,27 @@ Additional tables display:
 - synchronization status
 
 
-![alt text](docs/Picture2_GIF.gif)
+![alt text](docs/image2.gif)
+
+The movement of the cows is simulated based on their natural behavior. Healthy agents tend to form herds.
+
+![alt text](docs/image3.gif)
 
 If an agent representing a single cow moves outside the boundaries set by the shepherd, the agent will calculate a direction vector determining the fastest route back to the area designated by the shepherd.
+
+
+![alt text](docs/image6.gif)
+
+If a CowAgent detects that a particular cow is sick, it notifies the other agents. The AI agents then control the herd's formation to ensure that healthy cows maintain a proper distance from the infected individual.
+
+![alt text](docs/image7.gif)
+
+To prevent the spread of various diseases, sick cows also distance themselves from one another to isolate the infection until the individual cow has recovered.
+
+
+![alt text](docs/image10.gif)
+
+The GIF above shows a simulation where the cows are arranged in a straight line. It simulates the emergence of a new disease, allowing the observer to track the agents' behavior in response to the outbreak.
 
 
 
