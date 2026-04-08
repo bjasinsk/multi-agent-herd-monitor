@@ -32,6 +32,31 @@ When abnormal conditions are detected, the system can dynamically adjust the mov
 On the screenshot, you can see the system control panel. The shepherd can define the area where the cows are allowed to move. The smart collar system is intended to keep them within that designated area and prevent the spread of disease.
 
 
+The system provides a **Streamlit dashboard** that displays:
+
+- real-time map of cow positions
+- health status of each cow
+- current knowledge of each agent
+- state synchronization between agents
+
+Color coding:
+
+- Green — healthy cow
+- Red — infected cow
+
+Additional tables display:
+
+- herd state data
+- knowledge maintained by each agent
+- synchronization status
+
+
+![alt text](docs/Picture2_GIF.gif)
+
+If an agent representing a single cow moves outside the boundaries set by the shepherd, the agent will calculate a direction vector determining the fastest route back to the area designated by the shepherd.
+
+
+
 # System Architecture
 
 The system is based on a **multi-agent architecture** consisting of two main agent types.
@@ -217,27 +242,7 @@ If no constraints apply, cows move according to a herd cohesion model.
 Cows tend to move toward the center of nearby healthy cows while maintaining separation.
 
 
----
 
-# Visualization
-
-The system provides a **Streamlit dashboard** that displays:
-
-- real-time map of cow positions
-- health status of each cow
-- current knowledge of each agent
-- state synchronization between agents
-
-Color coding:
-
-- Green — healthy cow
-- Red — infected cow
-
-Additional tables display:
-
-- herd state data
-- knowledge maintained by each agent
-- synchronization status
 
 ---
 
